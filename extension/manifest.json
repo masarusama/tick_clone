@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "tick_clone に追加",
+  "version": "1.0.0",
+  "description": "選択した文章・ページ・リンク・画像を、自分の tick_clone に新しいノートとして追加します。",
+  "permissions": ["contextMenus", "storage", "notifications"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "このページを tick_clone に追加" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "icons": { "16": "icon.png", "48": "icon.png", "128": "icon.png" }
+}

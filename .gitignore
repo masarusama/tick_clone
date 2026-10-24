@@ -1,0 +1,30 @@
+# 公開するもの以外は、すべて除外（許可制）。
+# 本物のメモ（data/）・バックアップ・ログ・TickTick の書き出し・通知の鍵が、うっかり入らないようにするため。
+/*
+!/.gitignore
+!/README.md
+!/LICENSE
+!/requirements.txt
+!/start.bat
+!/start.sh
+!/uvicorn_log.json
+!/app/
+!/tools/
+!/extension/
+!/docs/
+
+# 公開するフォルダの中でも、除外するもの
+__pycache__/
+*.pyc
+*.log
+*.db
+*.csv
+.env
+data/
+data-*/
+
+# 自分用の移行ツール（TickTick の Web API で保存した JSON・添付など、個人のデータに依存するもの）
+/tools/apply_ticktick_extra.py
+/tools/link_attachments.py
+/tools/show_activity.py
+/tools/migrate_lists.py

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tick_clone</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#2f6fed">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <nav id="nav">
+    <div id="navscroll">
+      <div id="tagtree"></div>
+    </div>
+    <button id="nav-notify" title="通知の設定">🔔 通知の設定</button>
+    <button id="nav-help" title="使い方・ショートカット (?)">❓ 使い方</button>
+    <label id="donebox"><input type="checkbox" id="showdone"> 完了・中止も一覧に出す</label>
+  </nav>
+  <aside id="side">
+    <div id="sidehead">
+      <button id="btn-nav" title="メニュー">☰</button>
+      <input id="search" type="search" placeholder="検索  ( / )" autocomplete="off">
+    </div>
+    <div id="cal" hidden></div>
+    <div id="crumbrow"><span id="crumb"></span><button id="btn-sort" title="並び順を変える">並び: 更新日 ▾</button><span id="netstat"></span></div>
+    <ul id="list"></ul>
+  </aside>
+  <section id="bigcal" hidden></section>
+  <main id="main">
+    <div id="bar">
+      <button id="btn-back" title="一覧へ戻る">‹ 一覧</button>
+      <button id="bc-close" title="メモを閉じる">× 閉じる</button>
+      <span id="status"></span>
+      <span id="duebox" title="期日 (Alt+D)">📅 <input type="date" id="due"><input type="time" id="duetime" title="時刻（空 = 終日）"><button id="due-clear" title="期日を消す">×</button></span>
+      <button id="btn-remind" title="リマインダー（通知する時刻）">⏰</button>
+      <button id="btn-notify" title="通知の設定">🔔</button>
+      <button id="btn-attach" title="ファイルを添付（画像・PDF。ドラッグ&ドロップ、Ctrl+Vでも）">📎</button>
+      <input type="file" id="filepick" multiple hidden>
+      <button id="btn-preview" title="整形表示 ⇄ 編集 (Alt+P)">編集</button>
+      <button id="btn-history" title="履歴 (Alt+H)">履歴</button>
+      <button id="btn-more" title="このメモのメニュー（完了・期日・タグ・コピー・ゴミ箱へ…）">⋯</button>
+      <button id="btn-new" title="新規 (Alt+N)">＋ 新規</button>
+    </div>
+    <div id="wrap">
+      <textarea id="editor" placeholder="ここにメモを書く。 #タグ で分類" spellcheck="false"></textarea>
+      <div id="preview" hidden></div>
+      <div id="suggest" hidden></div>
+    </div>
+    <div id="gallery" hidden></div>
+    <div id="empty">メモを選ぶか、Alt+N で新規作成</div>
+  </main>
+</div>
+
+<div id="palette" hidden>
+  <div id="pal-box">
+    <input id="pal-input" placeholder="コマンドやメモを検索…" autocomplete="off">
+    <ul id="pal-list"></ul>
+  </div>
+</div>
+
+<div id="hist" hidden>
+  <div id="hist-box">
+    <div id="hist-head">履歴 <small>(↑↓で選択 / Enterで本文に戻す / Escで閉じる)</small></div>
+    <ul id="hist-list"></ul>
+    <pre id="hist-view"></pre>
+  </div>
+</div>
+
+<div id="notify" hidden>
+  <div id="notify-box">
+    <h3>🔔 通知の設定（この端末）</h3>
+    <p id="nt-state"></p>
+    <div id="nt-actions"></div>
+    <p class="nt-note">通知は、アプリを閉じていても届きます（PCでtick_cloneのサーバーが動いているときだけ）。この端末ごとに、1回だけ「有効にする」を押します。</p>
+    <button id="nt-close">閉じる</button>
+  </div>
+</div>
+<div id="trashview" hidden>
+  <div id="tv-box">
+    <h3 id="tv-title"></h3>
+    <p id="tv-date"></p>
+    <pre id="tv-body"></pre>
+    <div id="tv-actions"><button id="tv-restore" class="primary">元に戻す</button><button id="tv-close">閉じる</button></div>
+  </div>
+</div>
+<div id="ctx" hidden></div>
+<div id="dropzone" hidden>📎 ここにドロップして、開いているメモに添付</div>
+<button id="fab" title="新規メモ">＋</button>
+<div id="lightbox" hidden><img alt=""></div>
+
+<div id="help" hidden>
+  <div id="help-box">
+    <div id="help-top"><b>使い方</b><button id="help-close" title="閉じる (Esc)">× 閉じる</button></div>
+    <div id="help-body">読み込み中…</div>
+  </div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

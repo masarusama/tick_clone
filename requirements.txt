@@ -1,0 +1,4 @@
+# tick_clone requirements (Python 3.10+). Keep this file ASCII-only: pip on Japanese Windows reads it as cp932.
+fastapi>=0.110
+uvicorn>=0.29
+pywebpush>=2.0

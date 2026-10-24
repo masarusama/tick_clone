@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>tick_clone に追加 - 設定</title>
+<style>
+  body { font: 14px/1.6 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+  input[type=text] { width: 100%; padding: 6px 8px; font-size: 14px; box-sizing: border-box; }
+  button { padding: 6px 14px; font-size: 14px; margin-top: 8px; }
+  small, .note { color: #666; }
+  #msg { margin-left: 10px; }
+</style>
+</head>
+<body>
+<h2>tick_clone に追加 - 設定</h2>
+<p>送り先の tick_clone のアドレスです。空のままなら、次の順に試します。</p>
+<ol class="note">
+  <li>下の「先に試すアドレス」（Tailscale に入れた端末から使うときは、ここに入れる）</li>
+  <li>http://localhost:8765 （tick_clone が動いている PC から。入れなくても、これは試します）</li>
+</ol>
+<label>先に試すアドレス（省略可）<br>
+  <input id="server" type="text" placeholder="https://<PC名>.<tailnet名>.ts.net">
+</label>
+<div><button id="save">保存</button><button id="test">つながるか試す</button><span id="msg"></span></div>
+<p><small>送るのは、右クリックで選んだ文章・ページのタイトルと URL・画像だけで、送り先は上のアドレスだけです。インターネットに公開している tick_clone は、ありません（Tailscale の中だけ）。</small></p>
+<script src="options.js"></script>
+</body>
+</html>
