@@ -44,7 +44,7 @@
 必要なもの: **Python 3.10 以上**、**git**（変更履歴の記録に使います）。
 
 ```bash
-git clone https://github.com/<あなた>/tick_clone.git
+git clone https://github.com/masarusama/tick_clone.git
 cd tick_clone
 python -m venv .venv
 # Windows: .venv\Scripts\activate      Mac/Linux: source .venv/bin/activate
