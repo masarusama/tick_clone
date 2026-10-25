@@ -2360,6 +2360,49 @@ async function actKind(id, kind) {
   await refresh();
   if (id === state.cur && document.body.classList.contains("previewing")) togglePreview(true, false);
 }
+// ---- 振り返り: 完了・中止にしたあとの、ひとこと（ライフログ）。メモの末尾の「## 振り返り」の下に、日付つきの行で残す ----
+const RECAP_RE = /^##[ \t]*振り返り[ \t]*$/;
+function addRecap(body, ymdStr) {
+  const lines = body.replace(/\s+$/, "").split("\n");
+  const bullet = `- ${ymdStr} `;
+  const h = lines.findIndex((l) => RECAP_RE.test(l));
+  if (h < 0) return lines.join("\n") + "\n\n## 振り返り\n" + bullet + "\n"; // 見出しが無ければ、末尾に足す
+  let end = lines.length; // あれば、その節の最後（次の見出しの前。末尾の空行は除く）に、新しい行を足す
+  for (let i = h + 1; i < lines.length; i++) if (/^#{1,6}[ \t]+\S/.test(lines[i])) { end = i; break; }
+  let at = end;
+  while (at > h + 1 && lines[at - 1].trim() === "") at--;
+  lines.splice(at, 0, bullet);
+  return lines.join("\n") + "\n";
+}
+async function writeRecap(id) {
+  if (id === state.cur) await flush();
+  const n = D.get(id);
+  if (!n) return;
+  D.save(id, addRecap(n.body, todayStr()));
+  recapBar.hidden = true;
+  await refresh();
+  await open(id, true);
+  const bl = blockEls().filter((b) => !b.classList.contains("blank"));
+  if (bl.length) beginEdit(bl.at(-1), "end"); // 末尾の「- 日付 」の行に、カーソルを置く
+}
+// 完了・中止にした直後の、小さな案内（任意。「今後は出さない」で、オフにできる）
+const recapBar = Object.assign(document.createElement("div"), { id: "recapbar", hidden: true });
+recapBar.innerHTML = '<span id="recapmsg"></span><button id="recapgo" type="button">振り返りを書く</button><button id="recapoff" type="button" title="この案内を、今後は出さない（メモのメニューで、またオンにできます）">今後は出さない</button><button id="recapclose" type="button" title="閉じる">×</button>';
+document.body.append(recapBar);
+let recapTimer = null, recapId = null;
+function offerRecap(id, what) {
+  const n = D.get(id);
+  if (state.batch || !pref.get("recapPrompt", true) || !n || n.kind === "note") return;
+  recapId = id;
+  $("recapmsg").textContent = (what === "中止" ? "中止にしました。理由などを、" : "完了しました。") + "振り返りに残しますか？";
+  recapBar.hidden = false;
+  clearTimeout(recapTimer);
+  recapTimer = setTimeout(() => { recapBar.hidden = true; }, 15000);
+}
+$("recapgo").onclick = () => { if (recapId) writeRecap(recapId); };
+$("recapclose").onclick = () => { recapBar.hidden = true; };
+$("recapoff").onclick = () => { pref.set("recapPrompt", false); recapBar.hidden = true; setStatus("完了後の「振り返り」の案内を、オフにしました（メモのメニューで、またオンにできます）"); };
+
 // 中止（キャンセル）: 予定・タスクを、やらないことにする。メモは残り、完了日（実績）には数えない。繰り返しは「この回をスキップ」
 async function actCancel(id, on) {
   const n0 = D.get(id);
@@ -2373,6 +2416,7 @@ async function actCancel(id, on) {
   else setStatus(on ? "中止にしました（「完了・中止」の一覧に移ります。実績には数えません）" : "中止を戻しました");
   await refresh();
   if (id === state.cur && document.body.classList.contains("previewing")) togglePreview(true, false);
+  if (on) offerRecap(id, "中止");
 }
 async function actDone(id, done) {
   if (D.get(id) && D.get(id).kind === "note") { setStatus("ノートは完了にできません。メニューの「種類」でタスクにすると、完了できます"); return; }
@@ -2383,6 +2427,7 @@ async function actDone(id, done) {
   else setStatus(done ? "完了にしました（「完了・中止」の一覧に移ります）" : "完了を戻しました");
   await refresh();
   if (id === state.cur && document.body.classList.contains("previewing")) togglePreview(true, false);
+  if (done) offerRecap(id, "完了");
 }
 
 // 繰り返しの設定（メニューの「繰り返し」）
@@ -2741,6 +2786,7 @@ function noteMenu(id) {
     { label: "タグ", icon: "🏷", sub: [...tagItems, { sep: true }, { label: "新しいタグ…", run: () => newTagFor(id) }] },
     { sep: true },
     { label: "編集", icon: "✏️", key: "e", run: async () => { await open(id); togglePreview(false); } },
+    { label: "振り返りを書く", icon: "📝", run: () => writeRecap(id) },
     { label: "ファイルを添付…", icon: "📎", run: async () => { await open(id); $("filepick").click(); } },
     { label: "リンクにタイトルを付ける", icon: "🔗", run: () => actLinkTitles(id) },
     { label: "コピー", icon: "📋", sub: [
@@ -2749,6 +2795,7 @@ function noteMenu(id) {
     { label: "履歴", icon: "🕘", key: "Alt+H", run: async () => { await open(id); openHistory(); } },
     { sep: true },
     // 作成・更新の日時（年つき。スマホでも、メニューから見られる）
+    { label: pref.get("recapPrompt", true) ? "完了後の「振り返り」の案内: オン（オフにする）" : "完了後の「振り返り」の案内: オフ（オンにする）", icon: "💬", run: () => { const on = !pref.get("recapPrompt", true); pref.set("recapPrompt", on); setStatus(on ? "完了・中止の直後に、振り返りを促します" : "完了後の「振り返り」の案内を、オフにしました"); } },
     { label: `作成 ${fmt(n.created)}`, disabled: true },
     { label: `更新 ${fmt(n.updated)}`, disabled: true },
     ...(n.abandoned ? [{ label: `中止 ${fmt(n.cancelled || n.updated)}`, disabled: true }] : n.done && n.completed ? [{ label: `完了 ${fmt(n.completed)}`, disabled: true }] : []),
