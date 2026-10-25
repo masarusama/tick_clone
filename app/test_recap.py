@@ -53,5 +53,16 @@ q = store.create_note("通知から完了")["id"]
 store.update_note(q, "通知から完了", due="2026-10-01", repeat="FREQ=DAILY", kind="task")
 rq = store.update_note(q, store.get_note(q)["body"], status="done")
 check("通知の完了ボタン経由でも、記録が付く", f"- {today} ✓" in rq["body"], rq["body"])
+# ---- 振り返りの節の日付は、「今日」などに出さない（不具合の再発防止）----
+w = store.create_note("月末の掃除 キッチン\n\n#家")["id"]
+store.update_note(w, "月末の掃除 キッチン\n\n#家\n\n## 振り返り\n- " + today + " 実は4,5日まえ　完璧にやった\n", kind="task")
+ids_today = {x["id"] for x in store.list_notes(view="today", today=today)}
+check("振り返りの中の今日の日付で、「今日」の一覧に出ない", w not in ids_today)
+check("本文の日付（索引）にも入らない", all(d[0] != today for d in store.note_dates({"created": store.now_iso()}, store.get_note(w)["body"])), store.note_dates({"created": store.now_iso()}, store.get_note(w)["body"]))
+w2 = store.create_note("締切あり\n" + today + "までに提出\n\n## 振り返り\n- 2026-01-01 昨年の分\n")["id"]
+check("振り返りの外の日付は、これまでどおり、読む", w2 in {x["id"] for x in store.list_notes(view="today", today=today)})
+check("without_recap: 次の見出しの前までだけを除く", store.without_recap("A\n## 振り返り\n- 2026-10-25 x\n## 別\n本文 10/26\n") == "A\n## 別\n本文 10/26\n")
+ba = store.get_note(a)["body"]
+check("繰り返しのタスクの、自動の行（✓）の日付も、本文の日付に入らない", f"- {today} ✓" in ba and all(not (d[1] == "text" and d[0] == today) for d in store.note_dates({"created": store.now_iso()}, ba)), store.note_dates({"created": store.now_iso()}, ba))
 store.commit_now()
 print("失敗", bad)
