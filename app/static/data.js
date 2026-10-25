@@ -587,6 +587,28 @@ export function setPinned(id, pinned) {
   return n;
 }
 
+// ---- 振り返り（メモ末尾の「## 振り返り」の節）。サーバーの store.add_recap_line と同じ決まり ----
+// text が空: 手で書くための行「- 日付 」を足す（直前の行が、自動の「- 日付 ✓」「- 日付 中止」なら、その行の続きに書けるようにする）
+// text がある: 自動の記録の行「- 日付 text」を足す（同じ行が、すでにあれば、何もしない）
+export function addRecapLine(body, ymdStr, text = "") {
+  const lines = body.replace(/\s+$/, "").split("\n");
+  const bullet = `- ${ymdStr} ${text}`;
+  const h = lines.findIndex((l) => /^##[ \t]*振り返り[ \t]*$/.test(l));
+  if (h < 0) return lines.join("\n") + "\n\n## 振り返り\n" + bullet + "\n";
+  let end = lines.length;
+  for (let i = h + 1; i < lines.length; i++) if (/^#{1,6}[ \t]+\S/.test(lines[i])) { end = i; break; }
+  let at = end;
+  while (at > h + 1 && lines[at - 1].trim() === "") at--;
+  if (text) { if (lines.slice(h + 1, at).some((l) => l.startsWith(bullet))) return body; }
+  else {
+    const last = lines[at - 1] || "";
+    const m = new RegExp(`^- ${ymdStr} (✓|中止)[ \\t]*$`).exec(last);
+    if (at - 1 > h && m) { lines[at - 1] = `- ${ymdStr} ${m[1]} `; return lines.join("\n") + "\n"; }
+  }
+  lines.splice(at, 0, bullet);
+  return lines.join("\n") + "\n";
+}
+
 // 種類: "task"（完了できる）/ "note"（読み物・資料。○を付けない）
 export function setKind(id, kind) {
   const n = notes.get(id);
@@ -634,6 +656,7 @@ export function setDone(id, done, cancel = false) {
     n.due_set = nxt;
     n.dates = n.dates.filter((x) => x[1] !== "due");
     for (let i = span; i >= 0; i--) n.dates.push([addDays(nxt, -i), "due"]);
+    n.body = addRecapLine(n.body, new Date().toLocaleDateString("sv-SE"), cancel ? "中止" : "✓"); // 回ごとの記録を、「## 振り返り」へ（サーバーも同じ。二重にはならない）
     Object.assign(n, normalize(n), { updated: nowIso() });
     touchNote(id);
     queue(n, { status: cancel ? "abandoned" : "done" });

@@ -2361,19 +2361,8 @@ async function actKind(id, kind) {
   if (id === state.cur && document.body.classList.contains("previewing")) togglePreview(true, false);
 }
 // ---- 振り返り: 完了・中止にしたあとの、ひとこと（ライフログ）。メモの末尾の「## 振り返り」の下に、日付つきの行で残す ----
-const RECAP_RE = /^##[ \t]*振り返り[ \t]*$/;
-function addRecap(body, ymdStr) {
-  const lines = body.replace(/\s+$/, "").split("\n");
-  const bullet = `- ${ymdStr} `;
-  const h = lines.findIndex((l) => RECAP_RE.test(l));
-  if (h < 0) return lines.join("\n") + "\n\n## 振り返り\n" + bullet + "\n"; // 見出しが無ければ、末尾に足す
-  let end = lines.length; // あれば、その節の最後（次の見出しの前。末尾の空行は除く）に、新しい行を足す
-  for (let i = h + 1; i < lines.length; i++) if (/^#{1,6}[ \t]+\S/.test(lines[i])) { end = i; break; }
-  let at = end;
-  while (at > h + 1 && lines[at - 1].trim() === "") at--;
-  lines.splice(at, 0, bullet);
-  return lines.join("\n") + "\n";
-}
+// 末尾の「## 振り返り」へ、手で書くための行を足す（本体は data.js の addRecapLine。繰り返しの完了・中止の自動の行があれば、その行の続きに書く）
+const addRecap = (body, ymdStr) => D.addRecapLine(body, ymdStr, "");
 async function writeRecap(id) {
   if (id === state.cur) await flush();
   const n = D.get(id);

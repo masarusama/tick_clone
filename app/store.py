@@ -548,6 +548,28 @@ def create_note(body="", nid=None, created=None):
         return get_note(nid)
 
 
+RECAP_RE = re.compile(r"^##[ \t]*振り返り[ \t]*$")
+
+
+def add_recap_line(body, ymd, text):
+    """メモ末尾の「## 振り返り」の節の末尾に、「- 日付 text」の行を足す（節が無ければ、末尾に作る）。
+    繰り返すタスクの完了（✓）・スキップ（中止）の記録に使う。同じ日付・同じ印の行が、すでにあれば、何もしない（端末が先に足していても、二重にならない）。
+    app/static/data.js の addRecapLine と、同じ決まり。"""
+    lines = body.rstrip().split("\n")
+    bullet = f"- {ymd} {text}"
+    h = next((i for i, ln in enumerate(lines) if RECAP_RE.match(ln)), -1)
+    if h < 0:
+        return "\n".join(lines) + "\n\n## 振り返り\n" + bullet + "\n"
+    end = next((i for i in range(h + 1, len(lines)) if re.match(r"^#{1,6}[ \t]+\S", lines[i])), len(lines))
+    at = end
+    while at > h + 1 and not lines[at - 1].strip():
+        at -= 1
+    if any(ln.startswith(bullet) for ln in lines[h + 1:at]):
+        return body
+    lines.insert(at, bullet)
+    return "\n".join(lines) + "\n"
+
+
 def update_note(nid, body, due=None, base=None, status=None, pinned=None, priority=None, reminder=None, sort=None, event=None, start=None, repeat=None, list_=None, kind=None):
     """due: None=変えない / ""=期日を消す / "YYYY-MM-DD"=その日を期日にする
     status: None=変えない / "done"=完了にする / "abandoned"=中止（キャンセル）にする / "open"=完了・中止を戻す。繰り返すメモは、完了も中止も、期日が次の回へ進む（中止は完了日が付かない）
@@ -675,6 +697,8 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
                     meta["start"] = (nxt - timedelta(days=span)).isoformat() + meta["start"][10:]
                 meta["due"] = nxt.isoformat() + meta["due"][10:]
                 meta["last_done" if status == "done" else "last_cancelled"] = now_iso()[:16]
+                # 繰り返すタスクは、完了しても、完了日（completed）が残らない。代わりに、本文の「## 振り返り」へ、回ごとの記録（✓ / 中止）を1行足す
+                body = add_recap_line(body, now_iso()[:10], "✓" if status == "done" else "中止")
             elif meta.get("status") != status:
                 meta["status"] = status
                 if status == "done":
