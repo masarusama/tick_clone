@@ -21,8 +21,11 @@
 <label>先に試すアドレス（省略可）<br>
   <input id="server" type="text" placeholder="https://<PC名>.<tailnet名>.ts.net">
 </label>
+<label>アクセストークン（サーバーに TICK_TOKEN を設定しているときだけ）<br>
+  <input id="token" type="password" autocomplete="off" placeholder="（設定していなければ、空のまま）">
+</label>
 <div><button id="save">保存</button><button id="test">つながるか試す</button><span id="msg"></span></div>
-<p><small>送るのは、右クリックで選んだ文章・ページのタイトルと URL・画像だけで、送り先は上のアドレスだけです。インターネットに公開している tick_clone は、ありません（Tailscale の中だけ）。</small></p>
+<p><small>送るのは、右クリックで選んだ文章・ページのタイトルと URL・画像だけで、送り先は上のアドレスだけです。アクセストークンは、この端末の中にだけ保存します（Chrome の同期には載せません）。インターネットに公開している tick_clone は、ありません（Tailscale の中だけ）。</small></p>
 <script src="options.js"></script>
 </body>
 </html>

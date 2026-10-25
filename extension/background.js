@@ -25,11 +25,14 @@ async function servers() {
 }
 
 // つながったサーバーに送る。つながらない（通信エラー）ときだけ、次の候補を試す。サーバーが答えたら、その結果で終わり
+// アクセストークン（サーバーに TICK_TOKEN を設定しているときだけ）は、この端末の中（chrome.storage.local）にだけ保存し、Authorization ヘッダーで送る
 async function send(path, init) {
   let lastErr = null;
+  const { token } = await chrome.storage.local.get("token");
+  const headers = { ...(init && init.headers), ...(token ? { Authorization: "Bearer " + token } : {}) };
   for (const base of await servers()) {
     try {
-      const r = await fetch(base + path, { ...init, signal: AbortSignal.timeout(8000) });
+      const r = await fetch(base + path, { ...init, headers, signal: AbortSignal.timeout(8000) });
       return { r, base };
     } catch (e) {
       lastErr = e;
@@ -83,6 +86,7 @@ async function clip(info, tab) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ body, id, created, kind: "note" }),
     });
+    if (r.status === 401) throw new Error("アクセストークンが違う、または未設定です（拡張機能のオプションで入れてください）");
     if (!r.ok) throw new Error("サーバーのエラー (" + r.status + ")");
     notify("tick_clone に追加しました", body.split("\n")[0] + "\n（" + base.replace(/^https?:\/\//, "") + "）");
   } catch (e) {

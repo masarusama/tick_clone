@@ -670,6 +670,7 @@ const http = async (method, url, body) => {
   const r = await fetch(url, {
     method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined,
   });
+  if (r.status === 401) location.href = "/login"; // アクセストークンが設定されていて、まだログインしていない（または切れた）
   return r;
 };
 
@@ -737,6 +738,7 @@ async function flush() {
 
 async function pull() {
   const r = await fetch(`/api/sync?since=${meta.seq}&epoch=${encodeURIComponent(meta.epoch)}`);
+  if (r.status === 401) { location.href = "/login"; return; }
   if (!r.ok) throw new Error("sync " + r.status);
   const j = await r.json();
   if (j.epoch !== meta.epoch) { // 初回、またはサーバーの索引が作り直された: 全件取り直し

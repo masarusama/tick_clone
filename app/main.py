@@ -1,4 +1,7 @@
 import gzip
+import hashlib
+import hmac
+import html
 import json
 import logging
 import os
@@ -9,10 +12,10 @@ import time
 import unicodedata
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote, unquote
+from urllib.parse import parse_qs, quote, unquote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -45,6 +48,68 @@ class Body(BaseModel):
     created: str | None = None  # 同 作成日時（作成時のみ）
 
 
+# ---------- 任意のアクセストークン（環境変数 TICK_TOKEN）----------
+# 設定しなければ、これまでどおり、認証なし（127.0.0.1 だけで使う前提）。設定すると、トークンを知っている人だけが使える。
+#  - ブラウザ: /login で、トークンを入れる → Cookie（トークンそのものではなく、そこから作った印）で入る
+#  - Chrome 拡張など: `Authorization: Bearer <トークン>` ヘッダー
+TOKEN = os.environ.get("TICK_TOKEN", "").strip()
+AUTH_COOKIE = "tick_auth"
+OPEN_PATHS = {"/login", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"}  # 認証なしで見せてよいもの（ログイン画面・アプリのアイコン類）
+_login_fails = {}  # 接続元 → 失敗した時刻のリスト（総当たりを遅らせる）
+LOGIN_MAX_FAILS, LOGIN_WINDOW = 8, 600
+
+
+def _session_value():
+    return hmac.new(TOKEN.encode("utf-8"), b"tick_clone-session-v1", hashlib.sha256).hexdigest()
+
+
+def _authorized(request):
+    c = request.cookies.get(AUTH_COOKIE, "")
+    if c and hmac.compare_digest(c, _session_value()):
+        return True
+    h = request.headers.get("authorization", "")
+    return h[:7].lower() == "bearer " and hmac.compare_digest(h[7:].strip().encode("utf-8"), TOKEN.encode("utf-8"))
+
+
+def _login_page(msg="", status=200):
+    page = f"""<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tick_clone ログイン</title>
+<style>body{{font:16px/1.6 system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;background:#1c1c1e;color:#e8e8e8}}
+form{{width:min(360px,90vw)}}h1{{font-size:20px;margin:0 0 16px}}input{{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border-radius:8px;border:1px solid #444;background:#232326;color:inherit}}
+button{{margin-top:12px;width:100%;padding:10px;font-size:16px;border:0;border-radius:8px;background:#2f6fed;color:#fff;cursor:pointer}}.e{{color:#ff8a8a;margin:0 0 10px}}</style></head>
+<body><form method="post" action="/login"><h1>tick_clone</h1>{f'<p class="e">{html.escape(msg)}</p>' if msg else ''}
+<input type="password" name="token" placeholder="アクセストークン" autocomplete="current-password" autofocus required>
+<button type="submit">入る</button></form></body></html>"""
+    return HTMLResponse(page, status_code=status, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/login")
+def login_form():
+    return _login_page() if TOKEN else RedirectResponse("/", status_code=303)
+
+
+@app.post("/login")
+async def login(request: Request):
+    if not TOKEN:
+        return RedirectResponse("/", status_code=303)
+    who = request.client.host if request.client else "?"
+    now = time.time()
+    recent = [t for t in _login_fails.get(who, []) if now - t < LOGIN_WINDOW]
+    if len(recent) >= LOGIN_MAX_FAILS:
+        return _login_page("失敗が続いたので、しばらく待ってからやり直してください", 429)
+    form = parse_qs((await request.body()).decode("utf-8", "replace"))
+    given = (form.get("token") or [""])[0].strip()
+    if not hmac.compare_digest(given.encode("utf-8"), TOKEN.encode("utf-8")):
+        _login_fails[who] = recent + [now]
+        time.sleep(1)  # 総当たりを遅らせる
+        return _login_page("トークンが違います", 401)
+    _login_fails.pop(who, None)
+    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "") == "https"
+    resp = RedirectResponse("/", status_code=303)
+    resp.set_cookie(AUTH_COOKIE, _session_value(), max_age=60 * 60 * 24 * 365, httponly=True, samesite="lax", secure=secure)
+    return resp
+
+
 @app.middleware("http")
 async def revalidate_static(request: Request, call_next):
     """画面のファイル（JS/CSS/HTML）は、毎回「変わっていないか」を確認させる（変わっていなければ中身は送り直さない）。
@@ -54,6 +119,18 @@ async def revalidate_static(request: Request, call_next):
     if not p.startswith(("/api/", "/attachments/")) and "cache-control" not in resp.headers:
         resp.headers["Cache-Control"] = "no-cache"
     return resp
+
+
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    """TICK_TOKEN が設定されているときだけ働く。認証できない要求は、画面（HTML）なら /login へ、それ以外は 401 にする"""
+    if not TOKEN or request.url.path in OPEN_PATHS or _authorized(request):
+        return await call_next(request)
+    p = request.url.path
+    wants_html = request.method == "GET" and "text/html" in request.headers.get("accept", "") and not p.startswith(("/api/", "/attachments/"))
+    if wants_html:
+        return RedirectResponse("/login", status_code=303, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"detail": "認証が必要です（アクセストークン）"}, status_code=401, headers={"Cache-Control": "no-store"})
 
 
 def _heartbeat():
@@ -66,6 +143,7 @@ def _heartbeat():
 
 @app.on_event("startup")
 def startup():
+    logging.getLogger("uvicorn.error").info("アクセストークン: %s", "有効（/login でログイン）" if TOKEN else "なし（認証なし。127.0.0.1 だけで使ってください）")
     store.init_git()
     store.reindex()
     threading.Thread(target=_heartbeat, daemon=True).start()

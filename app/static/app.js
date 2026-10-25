@@ -1,6 +1,14 @@
 import * as D from "./data.js";
 import { holidayName } from "./holidays.js";
 
+// アクセストークン（TICK_TOKEN）が設定されていて、認証が切れたら、どの通信でも、ログイン画面へ
+const _fetch = window.fetch.bind(window);
+window.fetch = async (...a) => {
+  const r = await _fetch(...a);
+  try { if (r.status === 401 && new URL(r.url).pathname.startsWith("/api/")) location.href = "/login"; } catch { /* URL が読めなくても続ける */ }
+  return r;
+};
+
 const $ = (id) => document.getElementById(id);
 const ed = $("editor"), listEl = $("list"), tagTreeEl = $("tagtree"), searchEl = $("search");
 const statusEl = $("status"), sug = $("suggest");
