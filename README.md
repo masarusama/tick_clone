@@ -2,7 +2,12 @@
 
 **自分の PC で動かす、メモ・タスクアプリ。** TickTick のような使い心地（リスト・タグ・カレンダー・期日・繰り返し・通知）を、**1メモ = 1つの Markdown ファイル**で。データは自分の手元に残り、アプリが無くなっても、メモは読めます。
 
-> English summary: a self-hosted, single-user notes & tasks app (FastAPI + SQLite index + plain JavaScript PWA). Each note is one Markdown file with a small front-matter; the SQLite index can always be rebuilt from the files. Lists, tags, calendar, due dates & repeats, push notifications, offline PWA, Chrome extension, TickTick CSV import. **No login — keep it on `127.0.0.1` or a private network such as Tailscale. Never expose it to the public internet.** UI and docs are in Japanese.
+> **English: see [README.en.md](README.en.md).** Summary: a self-hosted, single-user notes & tasks app (FastAPI + SQLite index + plain JavaScript PWA). Each note is one Markdown file with a small front-matter; the SQLite index can always be rebuilt from the files. Lists, tags, calendar, due dates & repeats, push notifications, offline PWA, Chrome extension, TickTick CSV import. **No login — keep it on `127.0.0.1` or a private network such as Tailscale. Never expose it to the public internet.** UI and docs are in Japanese.
+
+> **書く時は、仕分けしない。仕分けは、アプリが済ませる。**
+> **あなたのメモは、ただのファイル。アプリが無くなっても、残る。**
+
+![デモ（架空のデータ）](docs/images/demo.gif)
 
 ![メイン画面](docs/images/screenshot-main.jpg)
 
