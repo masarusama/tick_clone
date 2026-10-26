@@ -320,3 +320,10 @@ body.hassel #list li.cur:not(.msel){box-shadow:none}
 #recapbar button{font-size:12px;padding:3px 9px;cursor:pointer}
 #recapbar #recapgo{background:var(--accent);color:#fff;border:0;border-radius:6px}
 @media (pointer:coarse){#recapbar button{padding:7px 11px;font-size:14px}}
+#btn-add{display:none}
+@media (min-width:701px){
+  #btn-add{display:block;margin:8px 12px 2px;padding:9px 12px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:15px;font-weight:600;cursor:pointer;text-align:center}
+  #btn-add:hover{filter:brightness(1.08)}
+  #btn-add small{opacity:.7;font-weight:400;margin-left:6px;border:1px solid #fff6;border-radius:4px;padding:0 5px}
+  body.bigcal #btn-add,body.selmode #btn-add{display:none}
+}

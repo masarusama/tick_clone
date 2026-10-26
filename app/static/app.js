@@ -1264,7 +1264,8 @@ function saveLocal() {
   state.dirty = false;
   if (!state.cur) {
     if (!body.trim()) { setStatus(""); return false; }
-    state.cur = D.create(body, state.newDue || "", (state.list && orderedLists().some((l) => l.name === state.list) ? state.list : "") || (state.newKind === "note" ? state.listRoutes.note || "" : ""), state.newKind || "task").id;
+    const kind = state.newDue ? "task" : state.newKind || "task"; // カレンダーの日から作ったメモ（日付つき）は、タスク
+    state.cur = D.create(body, state.newDue || "", (state.list && orderedLists().some((l) => l.name === state.list) ? state.list : "") || (kind === "note" ? state.listRoutes.note || "" : ""), kind).id;
     state.newKind = "";
     state.newDue = "";
   } else {
@@ -1296,9 +1297,12 @@ async function open(id, focus = true) {
 }
 
 // 新規メモの種類: 「ノート」の一覧 → ノート / 選んでいるリストに既定があればそれ / それ以外はタスク
+// 新規メモの種類（`n`・＋ボタン・共有）。選んだリストがあれば、そのリストの設定（無ければタスク）。
+// リストを選んでいない「すべて」などでは、**ノート**（書く時は仕分けしない。日付を付けると、タスクになる）。日付を扱う画面（今日・次の7日間・期限切れ・カレンダー）だけ、タスク
 function defaultKind() {
-  if (state.view === "notes") return "note";
-  return (state.list && (state.listToNote.includes(state.list) ? "note" : state.listKinds[state.list])) || "task";
+  if (state.list) return (state.listToNote.includes(state.list) ? "note" : state.listKinds[state.list]) || "task";
+  if (["today", "week", "overdue", "calendar", "bigcal"].includes(state.view)) return "task";
+  return "note";
 }
 async function newNote(kind) {
   await flush();
@@ -1310,7 +1314,7 @@ async function newNote(kind) {
   resetView();
   document.body.classList.remove("noedit");
   document.body.classList.add("editing");
-  setStatus("新規メモ");
+  setStatus(state.newKind === "task" ? "新規タスク" : "新規ノート（日付を付けると、タスクになります）");
   render();
   togglePreview(true, false); // 新しいメモも、整形表示で始める（最初の行が、そのまま書ける状態）
   beginEdit(blockEls()[0], "start");
@@ -1614,6 +1618,7 @@ $("showdone").addEventListener("change", (e) => { state.showDone = e.target.chec
 
 // ---------- 全体のキー操作 ----------
 $("btn-new").onclick = () => newNote();
+$("btn-add").onclick = () => newNote(); // PC の、一覧の上の大きな「＋」（スマホは、右下の丸い＋）
 $("fab").onclick = newNote;
 $("btn-nav").onclick = (e) => { e.stopPropagation(); document.body.classList.toggle("navopen"); };
 $("btn-back").onclick = () => { flush(); document.body.classList.remove("editing"); render(); };
@@ -1683,6 +1688,7 @@ document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && k === "k") { openPalette(); e.preventDefault(); return; }
   if (e.ctrlKey && k === "s") { flush(); e.preventDefault(); return; }
   if (e.altKey && k === "n") { newNote(e.shiftKey ? "note" : undefined); e.preventDefault(); return; }
+  if (e.altKey && k === "t") { newNote("task"); e.preventDefault(); return; } // はっきりタスクで作る
   if (e.altKey && k === "h") { openHistory(); e.preventDefault(); return; }
   if (e.altKey && k === "p") { togglePreview(); e.preventDefault(); return; }
   if (e.altKey && k === "d") { dueEl.focus(); e.preventDefault(); return; }
