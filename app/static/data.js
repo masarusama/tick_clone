@@ -309,6 +309,7 @@ export function list(f) {
 const cmpDesc = (x, y) => (x < y ? 1 : x > y ? -1 : 0);
 // 手動の並べ替えの位置。未設定のメモは、更新が新しいほど小さい（上）値にして、並び順が自然につながるようにする
 export const sortEff = (n) => (typeof n.sort === "number" ? n.sort : -(Date.parse(n.updated) / 1000));
+const firstTag = (n) => (n.tags || []).find((t) => !t.startsWith("リスト/")) || "";
 const SORTERS = {
   updated: (a, b) => cmpDesc(a.updated, b.updated),
   created: (a, b) => cmpDesc(a.created, b.created),
@@ -316,6 +317,8 @@ const SORTERS = {
   due: (a, b) => { const x = a.due || "9999", y = b.due || "9999"; return x < y ? -1 : x > y ? 1 : cmpDesc(a.updated, b.updated); },
   priority: (a, b) => (b.priority || 0) - (a.priority || 0) || cmpDesc(a.updated, b.updated),
   completed: (a, b) => cmpDesc(a.completed || "", b.completed || "") || cmpDesc(a.updated, b.updated), // 完了日が新しい順（完了日の無いものは後ろ）
+  // タグ順: 最初のタグの名前順（タグの無いメモは後ろ）。同じタグの中は、題名順
+  tag: (a, b) => { const x = firstTag(a), y = firstTag(b); return x === y ? (a.title || "").localeCompare(b.title || "", "ja") : !x ? 1 : !y ? -1 : x.localeCompare(y, "ja"); },
   title: (a, b) => (a.title || "").localeCompare(b.title || "", "ja") || cmpDesc(a.updated, b.updated),
   manual: (a, b) => sortEff(a) - sortEff(b) || cmpDesc(a.updated, b.updated),
 };
