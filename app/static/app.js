@@ -2403,6 +2403,24 @@ $("recapgo").onclick = () => { if (recapId) writeRecap(recapId); };
 $("recapclose").onclick = () => { recapBar.hidden = true; };
 $("recapoff").onclick = () => { pref.set("recapPrompt", false); recapBar.hidden = true; setStatus("完了後の「振り返り」の案内を、オフにしました（メモのメニューで、またオンにできます）"); };
 
+// 一段落して次へ: 完了にせず、振り返りへ「- 日付 ✓ 」の行を足して、期日を次の区切りへ進める（1つのタスクを、続いていく流れとして使う）
+async function actStep(id, due) {
+  if (id === state.cur) await flush();
+  const n = D.get(id);
+  if (!n || n.kind === "note" || n.done) return;
+  const today = todayStr();
+  let body = D.addRecapLine(n.body, today, "✓");
+  if (body === n.body) body = D.addRecapLine(n.body, today, ""); // 今日の「✓」の行が、すでにある: 新しい行だけ足す
+  D.save(id, body);
+  D.setDue(id, n.due_time ? `${due}T${n.due_time}` : due);
+  recapBar.hidden = true;
+  setStatus(`一段落しました。次の期日: ${fmtDue(due)}（続きを振り返りに書けます）`);
+  await refresh();
+  await open(id, true);
+  const bl = blockEls().filter((b) => !b.classList.contains("blank"));
+  if (bl.length) beginEdit(bl.at(-1), "end"); // 「- 日付 ✓ 」の続きに、カーソルを置く
+}
+
 // 中止（キャンセル）: 予定・タスクを、やらないことにする。メモは残り、完了日（実績）には数えない。繰り返しは「この回をスキップ」
 async function actCancel(id, on) {
   const n0 = D.get(id);
@@ -2685,12 +2703,12 @@ async function actCopy(id, what) {
 }
 
 // 「日付を選ぶ…」: 見えない日付欄を出してピッカーを開く
-function pickDate(id, pos) {
+function pickDate(id, pos, then) {
   const inp = document.createElement("input");
   inp.type = "date";
   inp.style.cssText = `position:fixed;left:${pos.x}px;top:${pos.y}px;opacity:0;width:1px;height:1px;border:0;padding:0`;
   document.body.append(inp);
-  inp.addEventListener("change", async () => { const v = inp.value; inp.remove(); if (v) { await actDue(id, v); await routeAfterPicker(id); } });
+  inp.addEventListener("change", async () => { const v = inp.value; inp.remove(); if (v) { if (then) await then(v); else { await actDue(id, v); await routeAfterPicker(id); } } });
   inp.addEventListener("blur", () => setTimeout(() => inp.remove(), 400));
   inp.focus();
   try { inp.showPicker(); } catch { /* 対応していなければ、そのまま手入力できる */ }
@@ -2736,6 +2754,12 @@ function noteMenu(id) {
     { label: "複数選択を始める（このメモから）", icon: "☑", run: () => startSelMode(id) },
     { sep: true },
     { label: n.abandoned ? "中止を戻す" : n.done ? "完了を戻す" : "完了にする", icon: n.done ? "↩" : "✅", key: "x", disabled: n.kind === "note", run: () => (n.abandoned ? actCancel(id, false) : actDone(id, !n.done)) },
+    ...(n.kind === "note" || n.done || n.repeat ? [] : [{ label: "一段落して次へ（完了にしない）", icon: "➡️", sub: [
+      { label: "次の期日: 明日", hint: addDays(1).slice(5).replace("-", "/"), run: () => actStep(id, addDays(1)) },
+      { label: "次の期日: 来週の月曜", hint: nextMon.slice(5).replace("-", "/"), run: () => actStep(id, nextMon) },
+      { label: "次の期日: 1週間後", hint: addDays(7).slice(5).replace("-", "/"), run: () => actStep(id, addDays(7)) },
+      { label: "次の期日: 日付を選ぶ…", run: (pos) => pickDate(id, pos, (v) => actStep(id, v)) },
+    ] }]),
     ...(n.kind === "note" || n.done ? [] : [{ label: n.repeat ? "この回を中止にする（スキップ）" : "中止にする（キャンセル）", icon: "🚫", run: () => actCancel(id, true) }]),
     { label: n.kind === "note" ? "種類: ノート" : "種類: タスク", icon: n.kind === "note" ? "📝" : "☑", sub: [
       { label: "タスク（完了できる）", icon: n.kind === "task" ? "●" : "○", run: () => actKind(id, "task") },
