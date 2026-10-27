@@ -66,7 +66,7 @@ store.update_note(d0, "あとで期日を付けるメモ", due="2026-12-01")
 check("kind が無いノートに期日を付けると、タスクになる", store.get_note(d0)["kind"] == "task")
 e0 = store.create_note("ノートのまま期日を付ける")["id"]
 store.update_note(e0, "ノートのまま期日を付ける", due="2026-12-01", kind="note")
-check("kind=note と一緒なら、期日つきでもノートのまま", store.get_note(e0)["kind"] == "note")
+check("kind=note と一緒でも、期日があれば、タスク（ノートは日付を持たない）", store.get_note(e0)["kind"] == "task")
 store.update_note(d0, "あとで期日を付けるメモ", due="")
 check("期日を消しても、タスクのまま", store.get_note(d0)["kind"] == "task")
 # 古いメモ（kind: が無く、期日がある）は、タスクとして読まれ、期日を変えてもタスクのまま
@@ -81,8 +81,7 @@ store.update_note(o, "古い期日つきメモ", due="")
 check("期日を消しても、タスクのまま（種類が書き留められる）", store.get_note(o)["kind"] == "task")
 
 # 絞り込み: ノート一覧・期限切れにノートは出ない
-a = store.create_note("期日つきノート")["id"]
-store.update_note(a, "期日つきノート", due="2020-01-01", kind="note")
+a = store.create_note("日付なしノート")["id"]
 b = store.create_note("期日つきタスク")["id"]
 store.update_note(b, "期日つきタスク", due="2020-01-01", kind="task")
 ids = lambda **kw: {x["id"] for x in store.list_notes(**kw)}
@@ -91,5 +90,15 @@ check("期限切れに、ノートは出ない", a not in ids(view="overdue", to
 check("ノート一覧にノートが出る", a in ids(view="notes") and b not in ids(view="notes"))
 c = store.counts("all", "2026-10-11")
 check("件数に notes がある", c["notes"] == len(ids(view="notes")), c)
+
+# ノートは日付を持たない: 期日を付けたらタスク / ノートにしたら日付が外れる
+x = store.create_note("日付テスト")["id"]
+store.update_note(x, "日付テスト", kind="note")
+store.update_note(x, "日付テスト", due="2026-11-01")
+check("ノートに期日を付けると、タスクになる", store.get_note(x)["kind"] == "task")
+store.update_note(x, "日付テスト", event="1", repeat="FREQ=WEEKLY;BYDAY=TU")
+store.update_note(x, "日付テスト", kind="note")
+g = store.get_note(x)
+check("ノートにすると、期日・予定・繰り返しが外れる", g["kind"] == "note" and not g.get("due") and not g.get("repeat") and not g.get("event"), g)
 store.commit_now()
 print("失敗", bad)

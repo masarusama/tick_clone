@@ -617,9 +617,15 @@ export function setKind(id, kind) {
   const n = notes.get(id);
   if (!n || n.kind === kind) return n || null;
   n.kind = kind;
+  const dated = kind === "note" && (n.due_set || n.event || n.repeat);
+  if (dated) { // ノートは、期日・予定・繰り返しを持たない（サーバーも同じ）
+    Object.assign(n, { due_set: "", due_time: "", event: "", remind: "", repeat: "" });
+    n.dates = n.dates.filter((x) => x[1] !== "due");
+    Object.assign(n, normalize(n));
+  }
   n.updated = nowIso();
   touchNote(id);
-  queue(n, { nk: kind });
+  queue(n, dated ? { nk: kind, due: "", repeat: "" } : { nk: kind });
   emit();
   return n;
 }

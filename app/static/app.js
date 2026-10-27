@@ -2358,6 +2358,11 @@ let galleryTimer;
 ed.addEventListener("input", () => { clearTimeout(galleryTimer); galleryTimer = setTimeout(updateGallery, 400); });
 
 // ---------- メモの操作（右クリックメニュー・チェック・ショートカットで共通） ----------
+// ノートにすると、期日・予定・繰り返しは外れる。あるメモが含まれるときは、先に確かめる（false なら、やめる）
+function okNote(ids) {
+  const k = ids.filter((id) => { const n = D.get(id); return n && n.kind !== "note" && (n.due_set || n.event || n.repeat); }).length;
+  return !k || window.confirm(`${k}件に、期日（予定・繰り返し）が付いています。ノートには日付を持たせないので、日付を外してノートにします。よろしいですか？（「元に戻す」で戻せます）`);
+}
 async function actKind(id, kind) {
   if (id === state.cur) await flush();
   D.setKind(id, kind);
@@ -2734,7 +2739,7 @@ function noteMenu(id) {
     ...(n.kind === "note" || n.done ? [] : [{ label: n.repeat ? "この回を中止にする（スキップ）" : "中止にする（キャンセル）", icon: "🚫", run: () => actCancel(id, true) }]),
     { label: n.kind === "note" ? "種類: ノート" : "種類: タスク", icon: n.kind === "note" ? "📝" : "☑", sub: [
       { label: "タスク（完了できる）", icon: n.kind === "task" ? "●" : "○", run: () => actKind(id, "task") },
-      { label: "ノート（読み物・資料）", icon: n.kind === "note" ? "●" : "○", run: () => actKind(id, "note") },
+      { label: "ノート（読み物・資料）", icon: n.kind === "note" ? "●" : "○", run: () => { if (okNote([id])) actKind(id, "note"); } },
     ] },
     { label: n.pinned ? "ピン留めを外す" : "ピン留め", icon: "📌", key: "p", run: () => actPin(id, !n.pinned) },
     { label: "優先度", icon: "🚩", sub: [
@@ -3132,7 +3137,7 @@ function bulkMenu(ids) {
     ] },
     { label: "種類", icon: "📝", sub: [
       { label: "タスク（完了できる）", run: run((id) => actKind(id, "task"), "タスクにしました") },
-      { label: "ノート（読み物・資料）", run: run((id) => actKind(id, "note"), "ノートにしました") },
+      { label: "ノート（読み物・資料）", run: () => { if (okNote(ids)) run((id) => actKind(id, "note"), "ノートにしました")(); } },
     ] },
     { label: "ピン留め / 外す", icon: "📌", sub: [
       { label: "ピン留めする", run: run((id) => actPin(id, true), "ピン留めしました") },

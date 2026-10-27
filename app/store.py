@@ -623,6 +623,9 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
             if kind not in ("note", "task"):
                 raise ValueError("種類は note / task のどちらかです")
             meta["kind"] = kind
+            if kind == "note":  # ノートは、期日・予定・繰り返しを持たない（日付を付けたら、タスクになる）
+                for k in ("due", "start", "allday", "reminder", "event", "repeat"):
+                    meta.pop(k, None)
         elif "kind" not in meta and ((status is not None and (meta.get("status") or "open") != status)
                                      or (due is not None and due != meta.get("due", ""))):
             # kind: を持たない古いメモ。期日を付けたらタスク（ノートには期日が無い）。期日を消す・完了にするときは、いまの種類を書き留める
@@ -667,6 +670,7 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
                 else:
                     raise ValueError("期日の形式が不正です")
                 meta["due"] = due
+                meta["kind"] = "task"  # 期日を付けたノートは、タスクになる
                 meta.pop("start", None)
                 # 終日 ⇄ 時刻つき を切り替えたら、リマインダーは既定に戻す（「10分前」は、終日では意味が変わってしまうため）
                 if before[0] and before[2] != meta["allday"] and reminder is None:
