@@ -47,13 +47,19 @@ function newId() { // サーバーと同じ形（日本時間）。同じ id を
   return { id: `${t.slice(0, 10).replace(/-/g, "")}-${t.slice(11, 19).replace(/:/g, "")}-${hex}`, created: t.slice(0, 19) + "+09:00" };
 }
 
-function noteBody({ title, url, text }) {
+function noteBody({ title, url, text, selFirst }) {
   const lines = [];
   const t = (title || "").replace(/\s+/g, " ").trim();
-  lines.push(t || url || "Webクリップ");
-  if (url) lines.push(url);
   const body = (text || "").replace(/\r\n?/g, "\n").trim();
-  if (body) lines.push("", body);
+  if (selFirst && body) { // 選んだ文字列が、いちばん上（メモの題名）。ページのタイトルと URL は、その下に出典として
+    lines.push(body, "");
+    if (t) lines.push(t);
+    if (url) lines.push(url);
+  } else {
+    lines.push(t || url || "Webクリップ");
+    if (url) lines.push(url);
+    if (body) lines.push("", body);
+  }
   lines.push("", "#共有");
   return lines.join("\n") + "\n";
 }
@@ -80,7 +86,7 @@ async function clip(info, tab) {
       const up = await uploadImage(info.srcUrl);
       text = `![](${up.url})` + (text ? "\n\n" + text : "");
     }
-    const body = noteBody({ title, url, text });
+    const body = noteBody({ title, url, text, selFirst: !!info.selectionText && info.mediaType !== "image" });
     const { id, created } = newId();
     const { r, base } = await send("/api/notes", {
       method: "POST", headers: { "Content-Type": "application/json" },

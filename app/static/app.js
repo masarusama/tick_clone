@@ -3653,6 +3653,12 @@ function shareBody({ title = "", text = "", url = "" }) {
   else if (u && rest === u) rest = "";
   if (rest && t && rest === t) rest = "";
   const lines = [];
+  if (t && rest) { // 選んだ文字列つきの共有: 選んだ文字列が、いちばん上（メモの題名）。ページのタイトルと URL は、その下に出典として
+    lines.push(rest, "", t);
+    if (u && !rest.includes(u)) lines.push(u);
+    lines.push("", "#共有");
+    return lines.join("\n") + "\n";
+  }
   if (t) lines.push(t);
   else if (rest) { const [first, ...others] = rest.split("\n"); lines.push(first); rest = others.join("\n").trim(); }
   else lines.push(u || "共有されたファイル");
