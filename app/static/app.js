@@ -1013,14 +1013,14 @@ async function openFromBig(id) {
 }
 async function newBigNote(day) {
   document.body.classList.add("bigopen");
-  state.newDue = day;
-  await newNote();
+  await newNote(undefined, day);
 }
 $("bc-close").onclick = async () => {
   await flush();
   state.cur = null;
   ed.value = "";
   state.newDue = "";
+  state.newTime = "";
   document.body.classList.remove("bigopen", "editing");
   document.body.classList.add("noedit");
   renderBig();
@@ -1267,7 +1267,9 @@ function saveLocal() {
     const kind = state.newDue ? "task" : state.newKind || "task"; // カレンダーの日から作ったメモ（日付つき）は、タスク
     state.cur = D.create(body, state.newDue || "", (state.list && orderedLists().some((l) => l.name === state.list) ? state.list : "") || (kind === "note" ? state.listRoutes.note || "" : ""), kind).id;
     state.newKind = "";
+    if (state.newDue && state.newTime) D.setDue(state.cur, `${state.newDue}T${state.newTime}`); // 時刻つきの期日
     state.newDue = "";
+    state.newTime = "";
   } else {
     D.save(state.cur, body);
   }
@@ -1304,13 +1306,16 @@ function defaultKind() {
   if (["today", "week", "overdue", "calendar", "bigcal"].includes(state.view)) return "task";
   return "note";
 }
-async function newNote(kind) {
+async function newNote(kind, due = "") {
   await flush();
   state.newKind = kind === "note" || kind === "task" ? kind : defaultKind();
+  state.newDue = due; // カレンダーの日から作るときの期日（前の、書きかけの日付は引き継がない）
+  state.newTime = "";
   state.cur = null;
   ed.value = "";
   state.dirty = false;
   syncDueUI(null);
+  dueEl.value = due;
   resetView();
   document.body.classList.remove("noedit");
   document.body.classList.add("editing");
@@ -2176,9 +2181,12 @@ const dueText = (n) => (n.due_set ? (n.start ? fmtDue(n.start) + "〜" : "") + f
 // v: "YYYY-MM-DD" / "YYYY-MM-DDTHH:MM" / ""
 async function setDue(v) {
   await flush();
-  if (!state.cur) {
-    syncDueUI(null);
-    setStatus("期日は、本文を書いて保存したメモに付けられます");
+  if (!state.cur) { // まだ保存していない新規メモ: 日付（と時刻）を覚えておいて、保存するときに付ける
+    state.newDue = v.slice(0, 10);
+    state.newTime = v.length >= 16 ? v.slice(11, 16) : "";
+    dueEl.value = state.newDue;
+    timeEl.value = state.newTime;
+    setStatus(v ? "期日を選びました（本文を書くと、保存されて、期日が付きます）" : "期日を消しました");
     return;
   }
   const n = D.setDue(state.cur, v);
