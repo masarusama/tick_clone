@@ -1309,7 +1309,9 @@ function defaultKind() {
 async function newNote(kind, due = "") {
   await flush();
   state.newKind = kind === "note" || kind === "task" ? kind : defaultKind();
-  state.newDue = due; // カレンダーの日から作るときの期日（前の、書きかけの日付は引き継がない）
+  if (!due && state.view === "today") due = todayStr(); // 「今日」の一覧で作るメモは、今日の期日（作った途端に一覧から消えないように）
+  if (!due && state.view === "calendar" && state.day) due = state.day; // カレンダーで選んでいる日
+  state.newDue = due; // 期日つきで作るとき（前の、書きかけの日付は引き継がない）
   state.newTime = "";
   state.cur = null;
   ed.value = "";
