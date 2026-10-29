@@ -27,7 +27,7 @@ check("締切の種類が入る", tm == [["2026-10-20", "text", "18:00", "deadli
 a = store.create_note("予定のメモ")["id"]
 check("最初は予定ではない", store.get_note(a)["event"] == "")
 store.update_note(a, "予定のメモ", due="2020-01-05T17:00")
-check("過去の期日は期限切れに出る", any(x["id"] == a for x in store.list_notes(view="overdue", today="2026-10-11")))
+check("過去の日付は期限切れに出る", any(x["id"] == a for x in store.list_notes(view="overdue", today="2026-10-11")))
 r = store.update_note(a, "予定のメモ", event="19:00")
 check("終わりの時刻つきの予定にできる", r["event"] == "19:00", r)
 check("ファイルに event が書かれる", "event: 19:00" in store._path_of(a).read_text(encoding="utf-8"))
@@ -44,7 +44,7 @@ r = store.update_note(a, "予定のメモ", event="")
 check("締切に戻せる", r["event"] == "" and any(x["id"] == a for x in store.list_notes(view="overdue", today="2026-10-11")), r)
 store.update_note(a, "予定のメモ", event="1")
 r = store.update_note(a, "予定のメモ", due="")
-check("期日を消すと、予定の印も消える", r["event"] == "" and r["due"] is None, r)
+check("日付を消すと、予定の印も消える", r["event"] == "" and r["due"] is None, r)
 store.reindex()
 check("索引を作り直しても event は保たれる", store.get_note(a)["event"] == "")
 
@@ -55,12 +55,12 @@ check("本文の日付の範囲が、全日の行になる", [x[0] for x in tr] 
 b = store.create_note("出張")["id"]
 store.update_note(b, "出張", due="2026-10-14")
 r = store.update_note(b, "出張", start="2026-10-12")
-check("複数日にできる（期日が終わりの日）", [x[0] for x in r["dates"] if x[1] == "due"] == ["2026-10-12", "2026-10-13", "2026-10-14"], r["dates"])
+check("複数日にできる（日付が終わりの日）", [x[0] for x in r["dates"] if x[1] == "due"] == ["2026-10-12", "2026-10-13", "2026-10-14"], r["dates"])
 check("ファイルに start が書かれる", "start: 2026-10-12" in store._path_of(b).read_text(encoding="utf-8"))
 r = store.update_note(b, "出張", due="2026-10-20")
-check("期日だけを変えると、複数日は解除される", [x[0] for x in r["dates"] if x[1] == "due"] == ["2026-10-20"], r["dates"])
+check("日付だけを変えると、複数日は解除される", [x[0] for x in r["dates"] if x[1] == "due"] == ["2026-10-20"], r["dates"])
 store.update_note(b, "出張", due="2026-10-20", start="2026-10-18")
-check("期日と開始日を同時に設定できる", [x[0] for x in store.get_note(b)["dates"] if x[1] == "due"] == ["2026-10-18", "2026-10-19", "2026-10-20"])
+check("日付と開始日を同時に設定できる", [x[0] for x in store.get_note(b)["dates"] if x[1] == "due"] == ["2026-10-18", "2026-10-19", "2026-10-20"])
 for bad_start in ("2026-10-25", "abc"):
     try:
         store.update_note(b, "出張", start=bad_start)

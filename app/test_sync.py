@@ -56,9 +56,9 @@ store.delete_note(cid)
 p2 = store.sync_pull(cur)
 check("削除が差分に出る", p2["deleted"] == [cid] and all(n["id"] != cid for n in p2["notes"]))
 
-# 期日
+# 日付
 u = store.update_note(a["id"], "端末が最新を元に編集", "2026-10-20")
-check("期日が差分に出る", store.sync_pull(cur)["notes"][-1]["due_set"] == "2026-10-20")
+check("日付が差分に出る", store.sync_pull(cur)["notes"][-1]["due_set"] == "2026-10-20")
 check("epochは安定", store.epoch() == ep)
 store.commit_now()
 print("失敗", bad)

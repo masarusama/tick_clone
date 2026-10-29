@@ -6,7 +6,7 @@
 変換ルール
 - 本文 = タイトル行 + 内容。サブタスクは親の本文末尾に「- [ ] 」の行として畳み込む
 - タグ欄 → 本文末尾の #タグ 行 / 元のリスト（フォルダがあれば フォルダ/リスト）→ frontmatter の list:
-- 作成日 → created（日本時間）。期日・完了などは frontmatter に残す
+- 作成日 → created（日本時間）。日付・完了などは frontmatter に残す
 - 完了(2)・中止(-1)のタスクは status: done / abandoned（中止には完了日を付けず、cancelled: に入れる）
 - TickTick のノート（projectKind=NOTE）は kind: note、タスクは kind: task
 """

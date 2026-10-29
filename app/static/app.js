@@ -41,7 +41,7 @@ state.groupBy = pref.get("groupBy", "none");
 state.sortMode = pref.get("sortMode", "updated");
 state.tagColors = pref.get("tagColors", {});
 state.filters = pref.get("filters", []); // 保存した絞り込み。設定として全端末で共通
-state.listToNote = pref.get("listToNote", []); // このリストに入れたメモは、自動でノートにする（期日の無い未完了のタスクだけ）。設定として全端末で共通
+state.listToNote = pref.get("listToNote", []); // このリストに入れたメモは、自動でノートにする（日付の無い未完了のタスクだけ）。設定として全端末で共通
 state.listPromote = pref.get("listPromote", {}); // 元のリスト → {to, days}: 締切が近づいたら、別のリストへ移す。設定として全端末で共通
 state.listRoutes = pref.get("listRoutes", {}); // "deadline" / "event" → 自動で入れるリスト名。設定として全端末で共通
 state.listKinds = pref.get("listKinds", {}); // リスト名 → 新規メモの既定の種類（note / task）。設定として全端末で共通
@@ -107,7 +107,7 @@ function fmt(iso) {
   const d = new Date(iso);
   return `${fmtDate(iso)} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
 }
-// 期日は、今年のものは月/日だけ、今年でないものは年つき（見やすさのため）
+// 日付は、今年のものは月/日だけ、今年でないものは年つき（見やすさのため）
 function fmtDue(ymdStr) {
   const [y, m, d] = ymdStr.split("-");
   return +y === new Date().getFullYear() ? `${+m}/${+d}` : `${y.slice(2)}/${m}/${d}`;
@@ -202,15 +202,15 @@ trashEl.addEventListener("mousedown", (e) => { if (e.target === trashEl) closeTr
 // ---------- 保存した絞り込み（フィルター） ----------
 const FTYPES = [
   ["list", "リスト"], ["tag", "タグ"], ["priority", "優先度"], ["kind", "種類（タスク/ノート）"], ["status", "状態（完了/未完了）"],
-  ["due", "期日"], ["event", "予定・締切"], ["title", "題名に含む文字"], ["text", "本文に含む文字"], ["pinned", "ピン留め"],
+  ["due", "日付"], ["event", "予定・締切"], ["title", "題名に含む文字"], ["text", "本文に含む文字"], ["pinned", "ピン留め"],
   ["completed", "完了した（○日以内）"], ["created", "作成した（○日以内）"], ["updated", "更新した（○日以内）"],
 ];
 const FOPTS = {
   priority: [[5, "高"], [3, "中"], [1, "低"], [0, "なし"]],
   kind: [["task", "タスク"], ["note", "ノート"]],
   status: [["open", "未完了"], ["completed", "完了（やった）"], ["abandoned", "中止（キャンセル）"], ["done", "完了・中止（終わったもの全部）"]],
-  due: [["today", "今日"], ["tomorrow", "明日"], ["next7", "今日から7日以内"], ["overdue", "期限切れ"], ["nodate", "期日なし"], ["hasdate", "期日あり"]],
-  event: [["event", "予定"], ["deadline", "締切（期日があって予定でない）"]],
+  due: [["today", "今日"], ["tomorrow", "明日"], ["next7", "今日から7日以内"], ["overdue", "期限切れ"], ["nodate", "日付なし"], ["hasdate", "日付あり"]],
+  event: [["event", "予定"], ["deadline", "締切（日付があって予定でない）"]],
 };
 const fdefault = (t) => (t === "list" ? "" : t === "tag" ? (state.tags.find((x) => x.real) || {}).tag || "" : t === "priority" ? 5 : t === "kind" ? "task" : t === "status" ? "open"
   : t === "due" ? "today" : t === "event" ? "event" : t === "pinned" ? "" : ["completed", "created", "updated"].includes(t) ? 7 : "");
@@ -407,7 +407,7 @@ function routeMenu(name) {
     { label: "ノートにしたメモを、自動で入れる", icon: state.listRoutes.note === name ? "●" : "○", run: toggle("note", "ノート") },
   ];
 }
-// リストの右クリック: 「このリストに入れたメモは、自動でノートにする」（期日の無い未完了のタスクだけ）
+// リストの右クリック: 「このリストに入れたメモは、自動でノートにする」（日付の無い未完了のタスクだけ）
 function toNoteMenu(name) {
   const on = state.listToNote.includes(name);
   return [{
@@ -416,19 +416,19 @@ function toNoteMenu(name) {
       const next = on ? state.listToNote.filter((x) => x !== name) : [...state.listToNote, name];
       saveListOrder(orderedLists().map((l) => l.name), state.listKinds, state.listRoutes, state.listPromote, next);
       if (on) { setStatus(`リスト「${name}」の「自動でノートにする」を、やめました`); return; }
-      setStatus(`リスト「${name}」に入れた、期日の無い未完了のタスクは、ノートになります`);
+      setStatus(`リスト「${name}」に入れた、日付の無い未完了のタスクは、ノートになります`);
       const ids = D.all().filter((n) => n.list === name && n.kind === "task" && !n.done && !n.due_set).map((n) => n.id);
-      if (ids.length && window.confirm(`いま「${name}」にある、期日の無い未完了のタスクが ${ids.length} 件あります。ノートにしますか？（期日つき・完了済みは、そのままです。「元に戻す」で戻せます）`)) {
-        await runBatch(ids, (id) => actKind(id, "note"), `「${name}」の、期日の無い未完了のタスクを、ノートにしました`);
+      if (ids.length && window.confirm(`いま「${name}」にある、日付の無い未完了のタスクが ${ids.length} 件あります。ノートにしますか？（日付つき・完了済みは、そのままです。「元に戻す」で戻せます）`)) {
+        await runBatch(ids, (id) => actKind(id, "note"), `「${name}」の、日付の無い未完了のタスクを、ノートにしました`);
       }
     },
   }];
 }
-// リストの右クリック: 「締切が近づいたら、別のリストへ移す」（期日つきの未完了タスクだけ。アプリを開いたとき、1日1回）
+// リストの右クリック: 「締切が近づいたら、別のリストへ移す」（日付つきの未完了タスクだけ。アプリを開いたとき、1日1回）
 function promoteMenu(name) {
   const cur = state.listPromote[name];
   const save = (p) => saveListOrder(orderedLists().map((l) => l.name), state.listKinds, state.listRoutes, p);
-  const set = (to, days) => () => { save({ ...state.listPromote, [name]: { to, days } }); setStatus(`「${name}」の期日つきのタスクは、締切が${days}日以内になったら、「${to}」へ移します（アプリを開いたとき）`); };
+  const set = (to, days) => () => { save({ ...state.listPromote, [name]: { to, days } }); setStatus(`「${name}」の日付つきのタスクは、締切が${days}日以内になったら、「${to}」へ移します（アプリを開いたとき）`); };
   const others = orderedLists().filter((l) => l.name !== name).slice(0, 30);
   return [{
     label: cur ? `締切が近づいたら移す: → ${cur.to}（${cur.days}日以内）` : "締切が近づいたら、別のリストへ移す", icon: "⏰",
@@ -627,7 +627,7 @@ function routeList(id, type) {
   if (to) return `（リスト「${to}」へ入れました）` + enterList(id, to);
   return autoFile(id); // 種類・日付の設定が無いときは、保存したフィルターのルールで
 }
-// メモをリストへ入れる（自動振り分け・ドラッグ・メニュー共通）。「このリストに入れたメモは、自動でノートにする」のリストなら、期日の無い未完了のタスクは、ノートにする。戻り値: 追加の案内
+// メモをリストへ入れる（自動振り分け・ドラッグ・メニュー共通）。「このリストに入れたメモは、自動でノートにする」のリストなら、日付の無い未完了のタスクは、ノートにする。戻り値: 追加の案内
 function enterList(id, name) {
   D.setList(id, name);
   const n = D.get(id);
@@ -647,7 +647,7 @@ function autoFile(id) {
   const extra = enterList(id, f.to);
   return `（フィルター「${f.name}」のルールで、リスト「${f.to}」へ入れました）` + extra;
 }
-// 過ぎた予定: 予定の印があり、期日（複数日なら終わりの日）が今日より前で、まだ完了にしていないもの
+// 過ぎた予定: 予定の印があり、日付（複数日なら終わりの日）が今日より前で、まだ完了にしていないもの
 const isPastEvent = (n) => !!n && n.kind !== "note" && !n.done && !!n.event && !!n.due_set && n.due_set < todayStr();
 // 過ぎた予定の案内（1日1回）: 予定日に完了にする / 中止にする / そのまま
 const pastBar = Object.assign(document.createElement("div"), { id: "pastbar", hidden: true });
@@ -698,7 +698,7 @@ async function maybeDaily() {
     offerPastEvents();
   } finally { dailyBusy = false; }
 }
-// 日付ピッカーで期日を選んだあと: リスト未設定なら、予定の印があれば「予定」、無ければ「締切」のリストへ入れる
+// 日付ピッカーで日付を選んだあと: リスト未設定なら、予定の印があれば「予定」、無ければ「締切」のリストへ入れる
 async function routeAfterPicker(id) {
   const n = id && D.get(id);
   if (!n || !n.due_set) return;
@@ -758,11 +758,11 @@ function renderNav() {
     b.children[2].textContent = n ? n : "";
     if (v === "overdue" && n) b.children[2].classList.add("warn");
     b.onclick = () => setView(v);
-    // メモをドラッグして落とすと、その一覧に入る条件になる（今日→期日が今日、など）
+    // メモをドラッグして落とすと、その一覧に入る条件になる（今日→日付が今日、など）
     const dropAct = {
-      today: [(id) => actDue(id, todayStr()), "期日を今日にする"],
-      week: [(id) => actDue(id, addDays(1)), "期日を明日にする"],
-      nodate: [(id) => actDue(id, ""), "期日を消す"],
+      today: [(id) => actDue(id, todayStr()), "日付を今日にする"],
+      week: [(id) => actDue(id, addDays(1)), "日付を明日にする"],
+      nodate: [(id) => actDue(id, ""), "日付を消す"],
       done: [(id) => actDone(id, true), "完了にする"],
     }[v];
     if (dropAct) { dropTarget(b, dropAct[0], dropAct[1]); b.title = "メモをここに落とすと、" + dropAct[1]; }
@@ -821,7 +821,7 @@ function renderNav() {
 
 // ---- カレンダー ----
 const calEl = $("cal");
-const SRC_LABELS = [["due,text", "期日＋本文の日付"], ["due", "期日だけ"], ["created", "作成日"], ["updated", "更新日"], ["completed", "完了日"]];
+const SRC_LABELS = [["due,text", "設定した日付＋本文の日付"], ["due", "設定した日付だけ"], ["created", "作成日"], ["updated", "更新日"], ["completed", "完了日"]];
 const calDone = () => (state.calSrc === "completed" ? "all" : state.showDone ? "all" : "hide"); // 完了日で見るときは、完了したメモが対象
 
 function renderCal() {
@@ -862,7 +862,7 @@ function renderCal() {
       c.title = info.items.map((x) => x.title).join("\n");
     }
     c.onclick = () => { state.day = s; state.calPanel = "day"; state.sel = 0; refresh(); };
-    dropTarget(c, (id) => actDue(id, s), `期日を ${+s.slice(5, 7)}/${+s.slice(8)} にする`); // メモをこの日にドラッグ → 期日がこの日になる
+    dropTarget(c, (id) => actDue(id, s), `日付を ${+s.slice(5, 7)}/${+s.slice(8)} にする`); // メモをこの日にドラッグ → 日付がこの日になる
     grid.append(c);
   }
   // 一覧に出すもの: 選んだ日のメモ / まだ日付が無いメモ（ここからカレンダーの日へドラッグできる）
@@ -926,7 +926,7 @@ function renderBig() {
   for (const [v, l] of SRC_LABELS) sel.append(Object.assign(document.createElement("option"), { value: v, textContent: l, selected: v === state.calSrc }));
   sel.onchange = () => { state.calSrc = sel.value; pref.set("calSrc", sel.value); renderBig(); };
   const mode = mk(state.bigMode === "week" ? "週" : "月", "月 ⇄ 週", () => { state.bigMode = state.bigMode === "week" ? "month" : "week"; pref.set("bigMode", state.bigMode); renderBig(); });
-  head.append(navb, ttl, mk("＋", "新しいメモ（期日は今日）", () => newBigNote(today)), mode, sel,
+  head.append(navb, ttl, mk("＋", "新しいメモ（日付は今日）", () => newBigNote(today)), mode, sel,
     mk("‹", "前へ ([)", () => shiftBig(-1)), mk("今日", "今日へ", () => { state.bigDay = today; renderBig(); }), mk("›", "次へ (])", () => shiftBig(1)));
   const wk = document.createElement("div");
   wk.id = "bc-wk";
@@ -968,7 +968,7 @@ function renderBig() {
     if (col) b.style.background = col;
     b.textContent = text;
     b.title = text;
-    b.draggable = !it.ghost; // 今後の回（薄い帯）は、ドラッグしない（元のメモの期日が動いてしまうため）
+    b.draggable = !it.ghost; // 今後の回（薄い帯）は、ドラッグしない（元のメモの日付が動いてしまうため）
     if (!it.ghost) b.addEventListener("dragstart", (e) => startDrag(e, it, b));
     b.onclick = (e) => { e.stopPropagation(); openFromBig(it.id); };
     b.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); openMenu(noteMenu(it.id), e.clientX, e.clientY); });
@@ -1010,7 +1010,7 @@ function renderBig() {
     }
     c.append(top, list);
     c.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s); };
-    dropTarget(c, (id) => actDue(id, s), `期日を ${d.getMonth() + 1}/${d.getDate()} にする`);
+    dropTarget(c, (id) => actDue(id, s), `日付を ${d.getMonth() + 1}/${d.getDate()} にする`);
     grid.append(c);
   }
   bigEl.replaceChildren(head, wk, grid);
@@ -1330,7 +1330,7 @@ function saveLocal() {
     const kind = state.newDue ? "task" : state.newKind || "task"; // カレンダーの日から作ったメモ（日付つき）は、タスク
     state.cur = D.create(body, state.newDue || "", (state.list && orderedLists().some((l) => l.name === state.list) ? state.list : "") || (kind === "note" ? state.listRoutes.note || "" : ""), kind).id;
     state.newKind = "";
-    if (state.newDue && state.newTime) D.setDue(state.cur, `${state.newDue}T${state.newTime}`); // 時刻つきの期日
+    if (state.newDue && state.newTime) D.setDue(state.cur, `${state.newDue}T${state.newTime}`); // 時刻つきの日付
     state.newDue = "";
     state.newTime = "";
   } else {
@@ -1373,11 +1373,11 @@ function defaultKind() {
 async function newNote(kind, due = "") {
   await flush();
   state.newKind = kind === "note" || kind === "task" ? kind : defaultKind();
-  if (!due && state.view === "today") due = todayStr(); // 「今日」の一覧で作るメモは、今日の期日（作った途端に一覧から消えないように）
+  if (!due && state.view === "today") due = todayStr(); // 「今日」の一覧で作るメモは、今日の日付（作った途端に一覧から消えないように）
   if (!due && state.view === "calendar" && state.day) due = state.day; // カレンダーで選んでいる日
   state.keepTag = "";
   state.newTag = state.tag || ""; // タグの一覧で作るメモには、そのタグを付ける（保存するとき、末尾に足す）
-  state.newDue = due; // 期日つきで作るとき（前の、書きかけの日付は引き継がない）
+  state.newDue = due; // 日付つきで作るとき（前の、書きかけの日付は引き継がない）
   state.newTime = "";
   state.cur = null;
   ed.value = "";
@@ -1577,11 +1577,11 @@ const commands = () => [
   { label: "優先度: 中（開いているメモ）", key: "", run: () => state.cur && actPrio(state.cur, 3) },
   { label: "優先度: 低（開いているメモ）", key: "", run: () => state.cur && actPrio(state.cur, 1) },
   { label: "優先度: なし（開いているメモ）", key: "", run: () => state.cur && actPrio(state.cur, 0) },
-  { label: "期日: 今日", key: "", run: () => setDue(addDays(0)) },
-  { label: "期日: 明日", key: "", run: () => setDue(addDays(1)) },
-  { label: "期日: 1週間後", key: "", run: () => setDue(addDays(7)) },
-  { label: "期日を入力（日付欄へ）", key: "Alt+D", run: () => dueEl.focus() },
-  { label: "期日を消す", key: "", run: () => setDue("") },
+  { label: "日付: 今日", key: "", run: () => setDue(addDays(0)) },
+  { label: "日付: 明日", key: "", run: () => setDue(addDays(1)) },
+  { label: "日付: 1週間後", key: "", run: () => setDue(addDays(7)) },
+  { label: "日付を入力（日付欄へ）", key: "Alt+D", run: () => dueEl.focus() },
+  { label: "日付を消す", key: "", run: () => setDue("") },
   { label: "完了にする ⇄ 戻す（開いているメモ）", key: "x", run: () => { const n = state.cur && D.get(state.cur); if (n) actDone(n.id, !n.done); } },
   { label: "メモのメニューを開く（右クリックと同じ）", key: ".", run: () => { if (state.cur) menuAtSelection(state.cur); } },
   { label: "ゴミ箱へ移す", key: "Alt+Backspace", run: trashNote },
@@ -1902,14 +1902,14 @@ function renderMd(src, base = 0) {
 const previewEl = $("preview"), galleryEl = $("gallery"), lightbox = $("lightbox");
 
 const SUG_MAX = 5; // 本文の日時がこの数以上あるメモには、提案を出さない
-// 本文から読み取った日時の提案（期日が未設定・未完了のとき、今日以降でいちばん近いもの）
+// 本文から読み取った日時の提案（日付が未設定・未完了のとき、今日以降でいちばん近いもの）
 function dateSuggestion() {
   if (state.curDue || !state.cur) return null;
   const n = D.get(state.cur);
   if (!n || n.done) return null;
   const today = todayStr();
   const texts = (n.dates || []).filter((x) => x[1] === "text");
-  if (texts.length >= SUG_MAX) return null; // 日時がやたら多いメモ（メール・ログ・一覧）は、どれが期日か分からないので提案しない
+  if (texts.length >= SUG_MAX) return null; // 日時がやたら多いメモ（メール・ログ・一覧）は、どれが日付か分からないので提案しない
   // 複数日（終わりの日 x[4] つき）は、全日に行がある。開始日の行に直して、終わりの日が今日以降のものを候補にする
   const startOf = (x) => (x[4] ? texts.filter((y) => y[4] === x[4]).map((y) => y[0]).sort()[0] : x[0]);
   const c = texts.filter((x) => (x[4] || x[0]) >= today).map((x) => [startOf(x), x[1], x[4] ? "" : x[2], x[3], x[4]])
@@ -1940,7 +1940,7 @@ function previewChip() {
   if (s) {
     const ev = s.kind === "event";
     h += `<div class="pv-sug">💡 本文の${ev ? "予定" : s.kind === "deadline" ? "締切" : "日時"}: ${fmtDue(s.d)}${s.until ? "〜" + fmtDue(s.until) : ""} ${s.until ? "" : s.t ? s.t + (s.end ? "〜" + s.end : "") : "（終日）"} `
-      + `<button class="sug-apply" type="button">${ev ? "予定にする" : "期日にする"}</button><button class="sug-no" type="button" title="この提案を消す">×</button></div>`;
+      + `<button class="sug-apply" type="button">${ev ? "予定にする" : "締切にする"}</button><button class="sug-no" type="button" title="この提案を消す">×</button></div>`;
   }
   const rs = repeatSuggestion();
   if (rs) {
@@ -1955,7 +1955,7 @@ async function applyRepeatSuggestion(rule) {
   await flush();
   const n = D.get(id);
   if (!n) return;
-  if (!n.due_set) { // 期日が無ければ、今日以降の最初の回を、期日にする
+  if (!n.due_set) { // 日付が無ければ、今日以降の最初の回を、締切にする
     const r = D.parseRule(rule);
     const first = r && D.nextAfter(r, addDaysYmd(todayStr(), -1));
     if (first) await setDue(first);
@@ -1967,11 +1967,11 @@ async function applyRepeatSuggestion(rule) {
 }
 const addDaysYmd = (s, k) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + k); return ymd(d); };
 
-// 提案を、期日（または予定）にする。予定で時刻つきなら、10分前に通知する
+// 提案を、日付（または予定）にする。予定で時刻つきなら、10分前に通知する
 async function applySuggestion(s) {
   const id = state.cur;
   await setDue(s.until ? s.until : s.t ? s.d + "T" + s.t : s.d);
-  if (s.until) D.setStart(id, s.d); // 複数日: 期日が終わりの日、開始日は s.d
+  if (s.until) D.setStart(id, s.d); // 複数日: 日付が終わりの日、開始日は s.d
   if (s.kind === "event") {
     D.setEvent(id, s.end || "1");
     if (s.t && !s.until) D.setRemind(id, "-PT10M");
@@ -1980,7 +1980,7 @@ async function applySuggestion(s) {
     if (document.body.classList.contains("previewing")) togglePreview(true, false);
   } else {
     const r = routeList(id, "deadline");
-    if (r) { setStatus(`期日にしました${r}`); await refresh(); }
+    if (r) { setStatus(`日付を付けました${r}`); await refresh(); }
   }
 }
 
@@ -2245,12 +2245,12 @@ function tailEdit() {
   beginEdit(last, "start");
 }
 
-// ---------- 期日 ----------
+// ---------- 日付 ----------
 const dueEl = $("due");
 
 const timeEl = $("duetime");
 
-// 開いているメモの、期日・時刻・リマインダーの表示を、メモの内容に合わせる
+// 開いているメモの、日付・時刻・リマインダーの表示を、メモの内容に合わせる
 function syncDueUI(n) {
   state.curDue = (n && n.due_set) || "";
   state.curTime = (n && n.due_time) || "";
@@ -2270,13 +2270,13 @@ async function setDue(v) {
     state.newTime = v.length >= 16 ? v.slice(11, 16) : "";
     dueEl.value = state.newDue;
     timeEl.value = state.newTime;
-    setStatus(v ? "期日を選びました（本文を書くと、保存されて、期日が付きます）" : "期日を消しました");
+    setStatus(v ? "日付を選びました（本文を書くと、保存されて、日付が付きます）" : "日付を消しました");
     return;
   }
   const n = D.setDue(state.cur, v);
   if (!n) return;
   syncDueUI(n);
-  setStatus(v ? "期日を設定しました: " + dueText(n) : "期日を消しました");
+  setStatus(v ? "日付を設定しました: " + dueText(n) : "日付を消しました");
   if (document.body.classList.contains("previewing")) togglePreview(true, false);
   await refresh();
 }
@@ -2308,7 +2308,7 @@ $("btn-remind").onclick = async () => { // バーの ⏰ → リマインダー�
 // 整形表示のクリック: ☐/☑ は切り替え、文字の部分は、その段落だけを編集に、末尾の余白は、書き足し（リンク・画像・文字の範囲選択中は除く）
 previewEl.addEventListener("click", (e) => {
   const rg = e.target.closest(".rsug-apply, .rsug-no");
-  if (rg) { // 本文の繰り返しの提案: 「繰り返しにする」（期日が無ければ、次の回を期日にする） / 「×」
+  if (rg) { // 本文の繰り返しの提案: 「繰り返しにする」（日付が無ければ、次の回を締切にする） / 「×」
     const rule = repeatSuggestion();
     if (!rule) return;
     if (rg.classList.contains("rsug-apply")) applyRepeatSuggestion(rule);
@@ -2316,7 +2316,7 @@ previewEl.addEventListener("click", (e) => {
     return;
   }
   const sg = e.target.closest(".sug-apply, .sug-no");
-  if (sg) { // 本文の日時の提案: 「期日にする」 / 「×」（この提案だけ、そのメモでは出さない）
+  if (sg) { // 本文の日時の提案: 「締切にする」 / 「×」（この提案だけ、そのメモでは出さない）
     const s = dateSuggestion();
     if (!s) return;
     if (sg.classList.contains("sug-apply")) applySuggestion(s);
@@ -2450,10 +2450,10 @@ let galleryTimer;
 ed.addEventListener("input", () => { clearTimeout(galleryTimer); galleryTimer = setTimeout(updateGallery, 400); });
 
 // ---------- メモの操作（右クリックメニュー・チェック・ショートカットで共通） ----------
-// ノートにすると、期日・予定・繰り返しは外れる。あるメモが含まれるときは、先に確かめる（false なら、やめる）
+// ノートにすると、日付・予定・繰り返しは外れる。あるメモが含まれるときは、先に確かめる（false なら、やめる）
 function okNote(ids) {
   const k = ids.filter((id) => { const n = D.get(id); return n && n.kind !== "note" && (n.due_set || n.event || n.repeat); }).length;
-  return !k || window.confirm(`${k}件に、期日（予定・繰り返し）が付いています。ノートには日付を持たせないので、日付を外してノートにします。よろしいですか？（「元に戻す」で戻せます）`);
+  return !k || window.confirm(`${k}件に、日付（予定・繰り返し）が付いています。ノートには日付を持たせないので、日付を外してノートにします。よろしいですか？（「元に戻す」で戻せます）`);
 }
 async function actKind(id, kind) {
   if (id === state.cur) await flush();
@@ -2505,7 +2505,7 @@ $("recapclose").onclick = () => { recapBar.hidden = true; };
 $("recapdate").onclick = () => { if (!recapId) return; const r = $("recapdate").getBoundingClientRect(); pickDate(recapId, { x: r.left, y: r.top - 280 > 0 ? r.top - 280 : r.bottom }, (v) => actCompleted(recapId, v)); };
 $("recapoff").onclick = () => { pref.set("recapPrompt", false); recapBar.hidden = true; setStatus("完了後の「振り返り」の案内を、オフにしました（メモのメニューで、またオンにできます）"); };
 
-// 一段落して次へ: 完了にせず、振り返りへ「- 日付 ✓ 」の行を足して、期日を次の区切りへ進める（1つのタスクを、続いていく流れとして使う）
+// 一段落して次へ: 完了にせず、振り返りへ「- 日付 ✓ 」の行を足して、日付を次の区切りへ進める（1つのタスクを、続いていく流れとして使う）
 async function actStep(id, due) {
   if (id === state.cur) await flush();
   const n = D.get(id);
@@ -2516,7 +2516,7 @@ async function actStep(id, due) {
   D.save(id, body);
   D.setDue(id, n.due_time ? `${due}T${n.due_time}` : due);
   recapBar.hidden = true;
-  setStatus(`一段落しました。次の期日: ${fmtDue(due)}（続きを振り返りに書けます）`);
+  setStatus(`一段落しました。次の日付: ${fmtDue(due)}（続きを振り返りに書けます）`);
   await refresh();
   await open(id, true);
   const bl = blockEls().filter((b) => !b.classList.contains("blank"));
@@ -2619,11 +2619,11 @@ async function actDue(id, v) {
   }
   const n = D.setDue(id, v);
   if (newStart) D.setStart(id, newStart);
-  setStatus(v && n ? `期日を設定しました: ${dueText(n)}` : "期日を消しました");
+  setStatus(v && n ? `日付を設定しました: ${dueText(n)}` : "日付を消しました");
   await refresh();
 }
 
-// 時刻だけを変える（空 = 終日にする）。期日が無ければ今日にする
+// 時刻だけを変える（空 = 終日にする）。日付が無ければ今日にする
 async function actDueTime(id, t) {
   const n = D.get(id);
   if (!n) return;
@@ -2631,14 +2631,14 @@ async function actDueTime(id, t) {
   const v = t ? `${day}T${t}` : day;
   if (id === state.cur) return setDue(v);
   const m = D.setDue(id, v);
-  setStatus(`期日を設定しました: ${m ? dueText(m) : v}`);
+  setStatus(`日付を設定しました: ${m ? dueText(m) : v}`);
   await refresh();
 }
 
 // ---- 並び順・手動の並べ替え ----
 const SORT_MODES = [
   ["updated", "更新日（新しい順）", "更新日"], ["created", "作成日（新しい順）", "作成日"], ["created_asc", "作成日（古い順）", "作成日↑"],
-  ["due", "期日（近い順）", "期日"], ["priority", "優先度（高い順）", "優先度"], ["completed", "完了日（新しい順）", "完了日"], ["title", "題名順", "題名"], ["tag", "タグ順（最初のタグの名前順）", "タグ"], ["manual", "手動（ドラッグ・メニューで並べる）", "手動"],
+  ["due", "日付（近い順）", "日付"], ["priority", "優先度（高い順）", "優先度"], ["completed", "完了日（新しい順）", "完了日"], ["title", "題名順", "題名"], ["tag", "タグ順（最初のタグの名前順）", "タグ"], ["manual", "手動（ドラッグ・メニューで並べる）", "手動"],
 ];
 function paintSortBtn() {
   const b = $("btn-sort");
@@ -2706,7 +2706,7 @@ function moveStep(id, dir) {
 }
 
 // ---- リマインダー ----
-// 選べる通知の時刻（何分前か）。終日の期日と、時刻つきの期日で、選択肢が違う
+// 選べる通知の時刻（何分前か）。終日の日付と、時刻つきの日付で、選択肢が違う
 function remindOptions(n) {
   if (!n.due_set) return [];
   if (!n.due_time) return [[D.DEFAULT_ALLDAY, "当日の朝9:00"], [900, "前日の朝9:00"], [2340, "2日前の朝9:00"]];
@@ -2726,7 +2726,7 @@ async function actRemind(id, raw) {
 function remindMenu(id) {
   const n = D.get(id);
   if (!n) return [];
-  if (!n.due_set) return [{ label: "先に、期日を付けてください", disabled: true }];
+  if (!n.due_set) return [{ label: "先に、日付を付けてください", disabled: true }];
   const allday = !n.due_time;
   const cur = D.remindMinutes(n.remind, allday);
   const explicit = !!n.remind;
@@ -2816,7 +2816,7 @@ function pickDate(id, pos, then) {
   try { inp.showPicker(); } catch { /* 対応していなければ、そのまま手入力できる */ }
 }
 
-// 複数日にする: いまの期日（または開始日）から、選んだ「終わりの日」まで
+// 複数日にする: いまの日付（または開始日）から、選んだ「終わりの日」まで
 function pickEnd(id, pos) {
   const inp = document.createElement("input");
   inp.type = "date";
@@ -2857,10 +2857,10 @@ function noteMenu(id) {
     { sep: true },
     { label: n.abandoned ? "中止を戻す" : n.done ? "完了を戻す" : "完了にする", icon: n.done ? "↩" : "✅", key: "x", disabled: n.kind === "note", run: () => (n.abandoned ? actCancel(id, false) : actDone(id, !n.done)) },
     ...(n.kind === "note" || n.done || n.repeat ? [] : [{ label: "一段落して次へ（完了にしない）", icon: "➡️", sub: [
-      { label: "次の期日: 明日", hint: addDays(1).slice(5).replace("-", "/"), run: () => actStep(id, addDays(1)) },
-      { label: "次の期日: 来週の月曜", hint: nextMon.slice(5).replace("-", "/"), run: () => actStep(id, nextMon) },
-      { label: "次の期日: 1週間後", hint: addDays(7).slice(5).replace("-", "/"), run: () => actStep(id, addDays(7)) },
-      { label: "次の期日: 日付を選ぶ…", run: (pos) => pickDate(id, pos, (v) => actStep(id, v)) },
+      { label: "次の日付: 明日", hint: addDays(1).slice(5).replace("-", "/"), run: () => actStep(id, addDays(1)) },
+      { label: "次の日付: 来週の月曜", hint: nextMon.slice(5).replace("-", "/"), run: () => actStep(id, nextMon) },
+      { label: "次の日付: 1週間後", hint: addDays(7).slice(5).replace("-", "/"), run: () => actStep(id, addDays(7)) },
+      { label: "次の日付: 日付を選ぶ…", run: (pos) => pickDate(id, pos, (v) => actStep(id, v)) },
     ] }]),
     ...(n.kind === "note" || n.done ? [] : [{ label: n.repeat ? "この回を中止にする（スキップ）" : "中止にする（キャンセル）", icon: "🚫", run: () => actCancel(id, true) }]),
     { label: n.kind === "note" ? "種類: ノート" : "種類: タスク", icon: n.kind === "note" ? "📝" : "☑", sub: [
@@ -2881,10 +2881,10 @@ function noteMenu(id) {
         { label: "1つ下へ", run: () => moveStep(id, "down") }, { label: "末尾へ", run: () => moveStep(id, "bottom") },
       ] }
       : { label: "手動で並べ替える", icon: "↕", run: () => setSortMode("manual") },
-    { label: "期日", icon: "📅", sub: [
+    { label: "日付", icon: "📅", sub: [
       dueItem("今日", addDays(0)), dueItem("明日", addDays(1)), dueItem("来週の月曜", nextMon), dueItem("1週間後", addDays(7)),
       { label: "日付を選ぶ…", run: (pos) => pickDate(id, pos) }, { sep: true },
-      { label: "期日を消す", disabled: !n.due_set, run: () => actDue(id, "") },
+      { label: "日付を消す", disabled: !n.due_set, run: () => actDue(id, "") },
     ] },
     { label: n.repeat ? "繰り返し: " + D.ruleLabel(n.repeat) : "繰り返し", icon: "🔁", disabled: !n.due_set, sub: [
       ...(n.due_set ? repeatPresets(n) : []).map(([label, rule]) => ({ label, icon: n.repeat === rule ? "●" : "○", run: () => actRepeat(id, rule) })),
@@ -3168,7 +3168,7 @@ async function restoreSnap(s) {
   if (n.body !== s.body) D.save(s.id, s.body);
   D.setList(s.id, s.list);
   const cur = n.due_set ? n.due_set + (n.due_time ? "T" + n.due_time : "") : "";
-  if (cur !== s.due) D.setDue(s.id, s.due); // 期日を消すと、予定・通知も消えるので、そのあとで戻す
+  if (cur !== s.due) D.setDue(s.id, s.due); // 日付を消すと、予定・通知も消えるので、そのあとで戻す
   if ((D.get(s.id).start || "") !== s.start) D.setStart(s.id, s.start);
   D.setEvent(s.id, s.event);
   D.setRemind(s.id, s.remind);
@@ -3237,7 +3237,7 @@ async function bulkDone(ids) {
 function bulkMenu(ids) {
   const k = ids.length;
   const run = (fn, label) => () => runBatch(ids, fn, label);
-  const dueItem = (label, v) => ({ label, hint: v.slice(5).replace("-", "/"), run: run((id) => actDue(id, v), `期日を「${label}」にしました`) });
+  const dueItem = (label, v) => ({ label, hint: v.slice(5).replace("-", "/"), run: run((id) => actDue(id, v), `日付を「${label}」にしました`) });
   const tagItems = state.tags.filter((t) => t.real).sort((a, b) => b.count - a.count).slice(0, 12)
     .map((t) => ({ label: "#" + t.tag, hint: String(t.count), run: run((id) => actTag(id, t.tag), `#${t.tag} を付けました`) }));
   return [
@@ -3251,9 +3251,9 @@ function bulkMenu(ids) {
       ...orderedLists().slice(0, 30).map((l) => ({ label: l.name, hint: String(l.count), run: run((id) => actList(id, l.name), `リスト「${l.name}」へ入れました`) })),
     ] },
     { label: "タグを付ける", icon: "🏷", sub: tagItems.length ? tagItems : [{ label: "（タグがありません）", disabled: true }] },
-    { label: "期日", icon: "📅", sub: [
+    { label: "日付", icon: "📅", sub: [
       dueItem("今日", addDays(0)), dueItem("明日", addDays(1)), dueItem("来週の月曜", nextMonday()), dueItem("1週間後", addDays(7)), { sep: true },
-      { label: "期日を消す", run: run((id) => actDue(id, ""), "期日を消しました") },
+      { label: "日付を消す", run: run((id) => actDue(id, ""), "日付を消しました") },
     ] },
     { label: "優先度", icon: "🚩", sub: [
       { label: "高", color: "#e5484d", run: run((id) => actPrio(id, 5), "優先度を「高」にしました") },
@@ -3382,8 +3382,8 @@ document.addEventListener("drop", () => setTimeout(endDrag, 0), true);
     clear: (id) => actDue(id, ""), done: (id) => actDone(id, true), trash: (id) => actTrash(id),
   };
   for (const [k, label, tip] of [
-    ["today", "📅 今日", "期日を今日にする"], ["tomorrow", "🌅 明日", "期日を明日にする"],
-    ["nextmon", "🗓 来週の月曜", "期日を来週の月曜にする"], ["clear", "◌ 日付なし", "期日を消す"],
+    ["today", "📅 今日", "日付を今日にする"], ["tomorrow", "🌅 明日", "日付を明日にする"],
+    ["nextmon", "🗓 来週の月曜", "日付を来週の月曜にする"], ["clear", "◌ 日付なし", "日付を消す"],
     ["done", "✅ 完了", "完了にする"], ["trash", "🗑 ゴミ箱", "ゴミ箱へ移す"],
   ]) {
     const b = document.createElement("div");

@@ -23,7 +23,7 @@ check("中止日が付く", len(r["cancelled"]) == 16, r["cancelled"])
 check("完了日（実績）は付かない", r["completed"] == "", r["completed"])
 text = store._path_of(a).read_text(encoding="utf-8")
 check("ファイルに status: abandoned と cancelled: が書かれ、completed: は無い", "status: abandoned" in text and "cancelled: " in text and "completed:" not in text, text[:200])
-check("日付（期日）は、そのまま残る", r["due"] == "2026-12-01", r["due"])
+check("日付（日付）は、そのまま残る", r["due"] == "2026-12-01", r["due"])
 cal = store.calendar("2026-10", "completed", "all")
 check("カレンダー（完了日）に出ない", all(x["id"] != a for v in cal.values() for x in v["items"]))
 r2 = store.update_note(a, "中止にする予定", status="open")
@@ -43,10 +43,10 @@ check("繰り返しは、中止にしても、終わらず、次の回へ進む"
 ct = store._path_of(c).read_text(encoding="utf-8")
 check("last_cancelled が付き、last_done・completed は付かない", "last_cancelled:" in ct and "last_done:" not in ct and "completed:" not in ct, ct[:300])
 
-# 端末で「期日・繰り返しを決めてから、すぐ中止（完了）」した分が、1回の送信にまとまっても、次の回へ進む
+# 端末で「日付・繰り返しを決めてから、すぐ中止（完了）」した分が、1回の送信にまとまっても、次の回へ進む
 e = store.create_note("まとめて届く予定")["id"]
 re_ = store.update_note(e, "まとめて届く予定", due="2026-10-01", repeat="FREQ=WEEKLY;BYDAY=TH", event="1", status="abandoned")
-check("期日・繰り返しと中止が同時に届いても、次の回へ進む", not re_["done"] and re_["due"] > "2026-10-01", re_)
+check("日付・繰り返しと中止が同時に届いても、次の回へ進む", not re_["done"] and re_["due"] > "2026-10-01", re_)
 f2 = store.create_note("まとめて届く完了")["id"]
 rf = store.update_note(f2, "まとめて届く完了", due="2026-10-01", repeat="FREQ=WEEKLY;BYDAY=TH", status="done")
 check("完了でも同じ（次の回へ進む）", not rf["done"] and rf["due"] > "2026-10-01", rf)

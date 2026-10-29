@@ -36,7 +36,7 @@ class Body(BaseModel):
     status: str | None = None   # None=変えない / "done" / "open"
     pinned: bool | None = None  # None=変えない / True=ピン留め / False=外す
     priority: int | None = None  # None=変えない / 0=なし / 1=低 / 3=中 / 5=高
-    start: str | None = None  # None=変えない / ""=複数日をやめる / "YYYY-MM-DD"=この日から期日までの複数日
+    start: str | None = None  # None=変えない / ""=複数日をやめる / "YYYY-MM-DD"=この日から日付までの複数日
     repeat: str | None = None  # None=変えない / ""=繰り返さない / "FREQ=WEEKLY;BYDAY=TU" など
     event: str | None = None  # None=変えない / ""=締切 / "1"=予定 / "HH:MM"=予定（終わりの時刻つき）
     reminder: str | None = None  # None=変えない / ""=既定 / "none"=通知しない / "-PT10M / PT0S" など
@@ -148,7 +148,7 @@ def startup():
     store.init_git()
     store.reindex()
     threading.Thread(target=_heartbeat, daemon=True).start()
-    keeper.start()  # 期日・リマインダーの通知
+    keeper.start()  # 日付・リマインダーの通知
 
 
 @app.on_event("shutdown")
@@ -188,7 +188,7 @@ def create_note(b: Body):
     except ValueError as e:
         raise HTTPException(400, str(e))
     lst = b.list or (_route("note") if b.kind == "note" else "")  # ノートとして作られ、リストが未設定なら、「ノートを自動で入れる」リストへ（Chrome拡張・共有からのメモも）
-    if b.due or b.status or b.pinned or b.priority or b.reminder or b.event or b.start or b.repeat or lst or b.kind or b.completed or b.sort is not None:  # 端末で期日・完了・ピン留め・優先度・リマインダー・並び順を付けてから作ったメモ
+    if b.due or b.status or b.pinned or b.priority or b.reminder or b.event or b.start or b.repeat or lst or b.kind or b.completed or b.sort is not None:  # 端末で日付・完了・ピン留め・優先度・リマインダー・並び順を付けてから作ったメモ
         try:
             n = store.update_note(n["id"], b.body, b.due, None, b.status, b.pinned, b.priority, b.reminder, b.sort, b.event, b.start, b.repeat, lst, b.kind, b.completed) or n
         except ValueError as e:
@@ -204,8 +204,8 @@ class Settings(BaseModel):
     lists: list[str] = []  # リストの並び順（空のリストもここに残る）。"リスト" か "フォルダ/リスト"
     filters: list[dict] = []  # 保存した絞り込み: [{id, name, match: "all"|"any", conds: [{t, v, not}]}]
     listRoutes: dict[str, str] = {}  # "deadline"（締切にしたメモ）/ "event"（予定にしたメモ）/ "note"（ノートにしたメモ）→ 自動で入れるリスト名（リスト未設定のメモだけ）
-    listToNote: list[str] = []  # このリストに入れたメモは、自動でノートにする（期日の無い未完了のタスクだけ）
-    listPromote: dict[str, dict] = {}  # 元のリスト名 → {to: 移す先のリスト名, days: 締切が何日以内になったら移すか}（期日つきの未完了タスクだけ）
+    listToNote: list[str] = []  # このリストに入れたメモは、自動でノートにする（日付の無い未完了のタスクだけ）
+    listPromote: dict[str, dict] = {}  # 元のリスト名 → {to: 移す先のリスト名, days: 締切が何日以内になったら移すか}（日付つきの未完了タスクだけ）
     listKinds: dict[str, str] = {}  # リスト名 → 新規メモの既定の種類（"note" / "task"。無ければ task）
 
 
@@ -458,7 +458,7 @@ def update_note(nid: str, b: Body):
     except store.Conflict as c:
         return JSONResponse(status_code=409, content={"conflict": True, "server": c.note})
     except ValueError as e:
-        raise HTTPException(400, str(e) or "期日は YYYY-MM-DD か YYYY-MM-DDTHH:MM の形で指定してください")
+        raise HTTPException(400, str(e) or "日付は YYYY-MM-DD か YYYY-MM-DDTHH:MM の形で指定してください")
 
 
 @app.delete("/api/notes/{nid}")

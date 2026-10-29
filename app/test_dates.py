@@ -72,7 +72,7 @@ for text, want in EV:
     bad += not ok
     print("OK " if ok else "NG ", "[時刻]", repr(text), got if not ok else "")
 
-# 本文中の「!日付」= 期日（store.note_dates）
+# 本文中の「!日付」= 日付（store.note_dates）
 import store
 meta = {"created": "2026-10-06T10:00:00+09:00"}
 nd = store.note_dates(meta, "!10/8 提出\n普通の10/9の話\n```\n!10/10\n```\nwow !!\n![](attachments/x.png)")

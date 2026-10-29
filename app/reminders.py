@@ -1,11 +1,11 @@
-"""期日・リマインダーの通知（時刻の計算と、時刻係）。
+"""日付・リマインダーの通知（時刻の計算と、時刻係）。
 
 用語
-- 期日（due）: "YYYY-MM-DD"（終日）または "YYYY-MM-DDTHH:MM"（時刻つき。日本時間）。TickTickから取り込んだ値は "+09:00" 付きのことがある
-- リマインダー: 期日の何分前に知らせるか（前=正、後=負）。メモの先頭の枠(frontmatter)の `reminder:` に保存
-    未設定 = 既定（終日→当日の朝9:00 / 時刻つき→期日の時刻）、"none" = 通知しない、
+- 日付（due）: "YYYY-MM-DD"（終日）または "YYYY-MM-DDTHH:MM"（時刻つき。日本時間）。TickTickから取り込んだ値は "+09:00" 付きのことがある
+- リマインダー: 日付の何分前に知らせるか（前=正、後=負）。メモの先頭の枠(frontmatter)の `reminder:` に保存
+    未設定 = 既定（終日→当日の朝9:00 / 時刻つき→日付の時刻）、"none" = 通知しない、
     それ以外 = ISO形式の長さを " / " でつないだもの（例 "-PT10M / PT0S"。TickTickの取り込み値と同じ書き方）
-- 通知の時刻 = 期日の時刻 − リマインダー。終日の期日の「期日の時刻」は、その日の 0:00（日本時間）
+- 通知の時刻 = 日付の時刻 − リマインダー。終日の日付の「日付の時刻」は、その日の 0:00（日本時間）
 """
 import json
 import re
@@ -60,7 +60,7 @@ def raw_from_minutes(mins):
 
 
 def parse_due(due):
-    """期日の文字列 → (その時刻のdatetime(日本時間), 終日か)。読めなければ (None, False)"""
+    """日付の文字列 → (その時刻のdatetime(日本時間), 終日か)。読めなければ (None, False)"""
     due = (due or "").strip()
     try:
         if len(due) >= 16 and due[10] == "T":
@@ -93,7 +93,7 @@ def fire_times(due, raw):
 def label(before, allday):
     """何分前か → 人が読む文字"""
     if allday:
-        # 終日の期日は、期日の日の0:00 を基準にする。通知する時刻を「何日前の何時」で言う（9540分前 → 7日前の朝9:00）
+        # 終日の日付は、日付の日の0:00 を基準にする。通知する時刻を「何日前の何時」で言う（9540分前 → 7日前の朝9:00）
         notify = -before
         day = notify // 1440
         tod = notify - day * 1440
@@ -142,7 +142,7 @@ class Keeper:
         tmp.replace(p)
 
     def candidates(self):
-        """通知の対象: 未完了で、期日があるメモ"""
+        """通知の対象: 未完了で、日付があるメモ"""
         with self.store.LOCK:
             return [dict(r) for r in self.store.db().execute(
                 "SELECT id, title, ndue, remind FROM notes WHERE done=0 AND ndue!=''")]
@@ -179,9 +179,9 @@ class Keeper:
                         continue  # 初回は、過ぎたものを全部「送った」ことにして、一斉に鳴らさない / 古すぎるものは捨てる
                     late = now - when > timedelta(minutes=5)
                     if allday:
-                        body = f"期日: {inst.month}/{inst.day}（終日）"
+                        body = f"日付: {inst.month}/{inst.day}（終日）"
                     else:
-                        body = f"期日: {inst.month}/{inst.day} {inst:%H:%M}"
+                        body = f"日付: {inst.month}/{inst.day} {inst:%H:%M}"
                     body += f" ・ {label(before, allday)}" + ("（遅れて通知）" if late else "")
                     send(n["title"] or "（空のメモ）", body, f"/?note={n['id']}", f"note-{n['id']}", "high", n["id"], True)
                     sent += 1
@@ -191,7 +191,7 @@ class Keeper:
                 at = datetime.fromisoformat(s["at"])
                 n = byid.get(s["id"])
                 if n is None:
-                    continue  # 完了した・消した・期日が無いメモのスヌーズは捨てる
+                    continue  # 完了した・消した・日付が無いメモのスヌーズは捨てる
                 if at <= now:
                     if now - at <= CATCHUP:
                         send(n["title"] or "（空のメモ）", "あとで（再通知）", f"/?note={n['id']}", f"note-{n['id']}", "high", n["id"], True)

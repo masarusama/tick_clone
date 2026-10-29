@@ -241,7 +241,7 @@ function matches(n, f) {
     const end = addDays(f.today, 6);
     if (!n.dates.some(([d, s]) => d >= f.today && d <= end && vsrcs.includes(s))) return false;
   } else if (v === "overdue" && f.today) {
-    if (n.done || n.event || n.kind === "note" || !n.due || !(n.due < f.today)) return false; // 期日(due)の最後の日が今日より前。ノートは期限切れにならない
+    if (n.done || n.event || n.kind === "note" || !n.due || !(n.due < f.today)) return false; // 日付(due)の最後の日が今日より前。ノートは期限切れにならない
   } else if (v === "nodate") { if (n.dates.length) return false; }
   else if (v === "notes") { if (n.kind !== "note") return false; }
   if (f.date) {
@@ -476,7 +476,7 @@ export function save(id, body) {
   return n;
 }
 
-// v: "YYYY-MM-DD"（終日）/ "YYYY-MM-DDTHH:MM"（時刻つき）/ ""（期日を消す。リマインダーも消える）
+// v: "YYYY-MM-DD"（終日）/ "YYYY-MM-DDTHH:MM"（時刻つき）/ ""（日付を消す。リマインダーも消える）
 export function setDue(id, v) {
   const n = notes.get(id);
   if (!n) return null;
@@ -484,20 +484,20 @@ export function setDue(id, v) {
   const switched = !!n.due_set && !!v && !n.due_time !== (v.length < 16); // 終日 ⇄ 時刻つき の切り替え
   n.due_set = day;
   n.due_time = v.length >= 16 ? v.slice(11, 16) : "";
-  if (!v) n.event = ""; // 期日を消すと、予定の印も消える（サーバーも同じ）
-  if (!v || switched) n.remind = ""; // 期日を消す / 終日⇄時刻つき を切り替えたら、リマインダーは既定に戻る（サーバーも同じ）
+  if (!v) n.event = ""; // 日付を消すと、予定の印も消える（サーバーも同じ）
+  if (!v || switched) n.remind = ""; // 日付を消す / 終日⇄時刻つき を切り替えたら、リマインダーは既定に戻る（サーバーも同じ）
   n.dates = n.dates.filter((x) => x[1] !== "due");
   if (day) n.dates.push([day, "due"]);
-  const toTask = !!v && n.kind === "note"; // 期日を付けたノートはタスクになる（サーバーも同じ）
+  const toTask = !!v && n.kind === "note"; // 日付を付けたノートはタスクになる（サーバーも同じ）
   if (toTask) n.kind = "task";
   Object.assign(n, normalize(n), { updated: nowIso() });
   touchNote(id);
-  queue(n, { ...(switched ? { due: v, reminder: "", start: null } : { due: v, start: null }), ...(toTask ? { nk: "task" } : {}) }); // 期日を設定し直すと、複数日はいったん解除される（サーバーも同じ）
+  queue(n, { ...(switched ? { due: v, reminder: "", start: null } : { due: v, start: null }), ...(toTask ? { nk: "task" } : {}) }); // 日付を設定し直すと、複数日はいったん解除される（サーバーも同じ）
   emit();
   return n;
 }
 
-// 複数日: s（開始日 "YYYY-MM-DD"。期日が終わりの日）。""なら1日だけに戻す
+// 複数日: s（開始日 "YYYY-MM-DD"。日付が終わりの日）。""なら1日だけに戻す
 export function setStart(id, st) {
   const n = notes.get(id);
   if (!n || !n.due_set) return n || null;
@@ -524,7 +524,7 @@ export function setRepeat(id, rule) {
   return n;
 }
 
-// 予定の印: ""（締切 = ふつうの期日）/ "1"（予定）/ "HH:MM"（予定。終わりの時刻つき）
+// 予定の印: ""（締切 = ふつうの日付）/ "1"（予定）/ "HH:MM"（予定。終わりの時刻つき）
 export function setEvent(id, val) {
   const n = notes.get(id);
   if (!n || (n.event || "") === val) return n || null;
@@ -557,7 +557,7 @@ export function parseDuration(s) {
   return m[1] === "-" ? total : -total;
 }
 export const fmtDuration = (b) => (b > 0 ? `-PT${b}M` : b === 0 ? "PT0S" : `PT${-b}M`);
-// 設定の文字列 → 分のリスト。未設定は既定（終日=当日朝9時 / 時刻つき=期日の時刻）、"none" は []
+// 設定の文字列 → 分のリスト。未設定は既定（終日=当日朝9時 / 時刻つき=日付の時刻）、"none" は []
 export function remindMinutes(raw, allday) {
   const r = (raw || "").trim();
   if (!r) return [allday ? DEFAULT_ALLDAY : 0];
@@ -568,7 +568,7 @@ export function remindMinutes(raw, allday) {
 }
 export const remindRaw = (mins) => (mins.length ? [...new Set(mins)].sort((a, b) => b - a).map(fmtDuration).join(" / ") : "none");
 export function remindLabel(b, allday) {
-  if (allday) { // 終日の期日は、期日の日の0:00 が基準。通知する時刻を「何日前の何時」で言う（9540分前 → 7日前の朝9:00）。サーバーの reminders.label と同じ決まり
+  if (allday) { // 終日の日付は、日付の日の0:00 が基準。通知する時刻を「何日前の何時」で言う（9540分前 → 7日前の朝9:00）。サーバーの reminders.label と同じ決まり
     const notify = -b, day = Math.floor(notify / 1440), tod = notify - day * 1440;
     const dw = day === 0 ? "当日" : day === -1 ? "前日" : day < 0 ? `${-day}日前` : `${day}日後`;
     return dw + "の" + (tod === 540 ? "朝9:00" : `${Math.floor(tod / 60)}:${String(tod % 60).padStart(2, "0")}`);
@@ -618,7 +618,7 @@ export function setKind(id, kind) {
   if (!n || n.kind === kind) return n || null;
   n.kind = kind;
   const dated = kind === "note" && (n.due_set || n.event || n.repeat);
-  if (dated) { // ノートは、期日・予定・繰り返しを持たない（サーバーも同じ）
+  if (dated) { // ノートは、日付・予定・繰り返しを持たない（サーバーも同じ）
     Object.assign(n, { due_set: "", due_time: "", event: "", remind: "", repeat: "" });
     n.dates = n.dates.filter((x) => x[1] !== "due");
     Object.assign(n, normalize(n));
@@ -661,7 +661,7 @@ export function setDone(id, done, cancel = false, when = "") {
   if (!n || n.done === done) return n || null;
   const rule = done && n.repeat && n.due_set ? parseRule(n.repeat) : null;
   const nxt = rule ? advanceRule(rule, n.due_set, new Date().toLocaleDateString("sv-SE")) : null;
-  if (nxt) { // 繰り返すメモ: 完了にせず、期日を次の回へ（サーバーも同じ計算をする）
+  if (nxt) { // 繰り返すメモ: 完了にせず、日付を次の回へ（サーバーも同じ計算をする）
     const span = n.start ? dayDiff(n.start, n.due_set) : 0;
     n.due_set = nxt;
     n.dates = n.dates.filter((x) => x[1] !== "due");

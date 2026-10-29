@@ -16,7 +16,7 @@ def check(name, cond, extra=""):
 
 D = lambda s: date.fromisoformat(s)
 
-# 次の回: (決まり, 期日, 期待)
+# 次の回: (決まり, 日付, 期待)
 NEXT = [
     ("FREQ=DAILY", "2026-10-11", "2026-10-12"),
     ("FREQ=DAILY;INTERVAL=3", "2026-10-30", "2026-11-02"),
@@ -54,7 +54,7 @@ check("UNTIL の翌日は無い", recur.next_after(r, D("2026-10-12")) is None a
 # 遅れて完了: 過ぎた回を飛ばして、今日以降へ
 r = recur.parse("FREQ=DAILY")
 check("遅れて完了（毎日）→今日", recur.advance(r, D("2026-10-05"), D("2026-10-11")) == D("2026-10-11"))
-check("早く完了（毎日）→期日の翌日", recur.advance(r, D("2026-10-20"), D("2026-10-11")) == D("2026-10-21"))
+check("早く完了（毎日）→日付の翌日", recur.advance(r, D("2026-10-20"), D("2026-10-11")) == D("2026-10-21"))
 r = recur.parse("FREQ=MONTHLY;BYMONTHDAY=10")
 check("遅れて完了（毎月10日・12日に完了）→来月10日", recur.advance(r, D("2026-10-10"), D("2026-10-12")) == D("2026-11-10"))
 check("3か月遅れて完了→今日以降の最初の10日", recur.advance(r, D("2026-07-10"), D("2026-10-12")) == D("2026-11-10"))

@@ -1,6 +1,6 @@
 # tick_clone
 
-**自分の PC で動かす、メモ・タスクアプリ。** TickTick のような使い心地（リスト・タグ・カレンダー・期日・繰り返し・通知）を、**1メモ = 1つの Markdown ファイル**で。データは自分の手元に残り、アプリが無くなっても、メモは読めます。
+**自分の PC で動かす、メモ・タスクアプリ。** TickTick のような使い心地（リスト・タグ・カレンダー・日付・繰り返し・通知）を、**1メモ = 1つの Markdown ファイル**で。データは自分の手元に残り、アプリが無くなっても、メモは読めます。
 
 > **English: see [README.en.md](README.en.md).** Summary: a self-hosted, single-user notes & tasks app (FastAPI + SQLite index + plain JavaScript PWA). Each note is one Markdown file with a small front-matter; the SQLite index can always be rebuilt from the files. Lists, tags, calendar, due dates & repeats, push notifications, offline PWA, Chrome extension, TickTick CSV import. **No login — keep it on `127.0.0.1` or a private network such as Tailscale. Never expose it to the public internet.** UI and docs are in Japanese.
 
@@ -45,7 +45,7 @@ python -c "import secrets; print(secrets.token_urlsafe(24))"     # 長いラン�
 - **メモは、ただのファイル。** 1件 = Markdown ファイル1つ（`data/notes/年/月/ID.md`）。**エディタで開けて、`grep` で探せて、スクリプトで読み書きできて、git で履歴が残ります。** 検索・一覧を速くする索引（SQLite）は、消しても作り直せます。形式は [docs/ファイル形式.md](docs/ファイル形式.md)。**データは、自分のPCの中だけ**（クラウドにも、アカウントにも、預けません）。
 - **整形表示のまま書ける**（行ごとに編集）。箇条書き・チェックボックス・画像・PDF・URL のタイトル自動取得。
 - **リスト**（フォルダ/リストの2階層）・**タグ**（階層・色）・**フィルター**（条件を組み合わせて保存）・**ノートとタスクの区別**。
-- **期日・時刻・予定と締切・複数日・繰り返し・リマインダー**（プッシュ通知）。本文の日時（「来週の日曜のお昼」など）から、期日を提案。
+- **日付・時刻・予定と締切・複数日・繰り返し・リマインダー**（プッシュ通知）。本文の日時（「来週の日曜のお昼」など）から、日付を提案。
 - **カレンダー**（小さいもの・月カレンダー（大））。完了日・中止（キャンセル）の記録。
 - **自動振り分け**: 締切・予定・ノートにしたとき、締切が近づいたとき、フィルターに当てはまったとき、決めたリストへ自動で入る。
 - **複数選択・まとめて操作・元に戻す**、ドラッグ&ドロップ、キーボード操作、コマンドパレット。
@@ -124,7 +124,7 @@ TickTick の設定 → アカウント → データのバックアップ（CSV�
 python tools/import_ticktick.py export.csv --data data
 ```
 
-フォルダ/リスト → `list:`、ノート/タスク → `kind:`、完了・中止・期日・繰り返し・優先度・タグを引き継ぎます。同じファイルを何度流しても、重複しません。
+フォルダ/リスト → `list:`、ノート/タスク → `kind:`、完了・中止・日付・繰り返し・優先度・タグを引き継ぎます。同じファイルを何度流しても、重複しません。
 
 ## Chrome 拡張（右クリックで追加）
 

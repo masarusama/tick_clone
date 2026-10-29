@@ -29,7 +29,7 @@ LOCK = threading.RLock()
 TAG_RE = re.compile(r"(?:(?<=\s)|^)#([^\s#\[\]()]+)", re.M)
 TAG_TRAIL = "、。，．,.!?！？)）」』】]:;：；"
 FENCE_RE = re.compile(r"^(```|~~~).*?^\1", re.M | re.S)
-INDEX_VERSION = 18  # 18: 「## 振り返り」の節の日付・語は、日付・繰り返しの読み取りから除く / 17: 中止（abandoned・cancelled 列。完了日には数えない） / 16: 完了日（completed 列） / 15: 種類（kind 列。ノート/タスク） / 14: リスト（lst 列） / 13: 繰り返し（rrule・rsug 列） / 12: 本文の日付の範囲（複数日の予定・dates.u） / 11: 本文の日時に終了時刻・種類(予定/締切)・event列 / 10: 英数字に挟まれた数字・熟語(朝日など)は時刻にしない / 9: 本文の日時に時刻（dates.t） / 8: sort 列（手動の並べ替え） / 2: 本文中の !日付 を期日として索引 / 3: 同期用 seq・due_set 列 / 4: pinned 列 / 5: priority 列 / 6: due_time・ndue・remind 列 / 7: タイトルから [題名](URL) の記号を除く
+INDEX_VERSION = 18  # 18: 「## 振り返り」の節の日付・語は、日付・繰り返しの読み取りから除く / 17: 中止（abandoned・cancelled 列。完了日には数えない） / 16: 完了日（completed 列） / 15: 種類（kind 列。ノート/タスク） / 14: リスト（lst 列） / 13: 繰り返し（rrule・rsug 列） / 12: 本文の日付の範囲（複数日の予定・dates.u） / 11: 本文の日時に終了時刻・種類(予定/締切)・event列 / 10: 英数字に挟まれた数字・熟語(朝日など)は時刻にしない / 9: 本文の日時に時刻（dates.t） / 8: sort 列（手動の並べ替え） / 2: 本文中の !日付 を日付として索引 / 3: 同期用 seq・due_set 列 / 4: pinned 列 / 5: priority 列 / 6: due_time・ndue・remind 列 / 7: タイトルから [題名](URL) の記号を除く
 BANG_DUE_RE =re.compile(r"(?:(?<=\s)|^)[!！]([^\s!！\[]+)", re.M)
 ID_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$")
 
@@ -99,7 +99,7 @@ _RECAP_HEAD = re.compile(r"^##[ \t]*振り返り[ \t]*$")
 
 def without_recap(body):
     """「## 振り返り」の節（次の見出しの前まで）を取り除いた本文。振り返りは、すでに終わったことの記録なので、その中の日付（「2026-10-25」など）を、
-    期日・「今日」の一覧・カレンダーの「本文の日付」・提案・通知に、使わないため（日付・繰り返しを読む前に、これを通す）"""
+    日付・「今日」の一覧・カレンダーの「本文の日付」・提案・通知に、使わないため（日付・繰り返しを読む前に、これを通す）"""
     if "振り返り" not in body:
         return body
     out, skipping = [], False
@@ -116,7 +116,7 @@ def without_recap(body):
 
 def note_dates(meta, body):
     """索引用の日付: [(YYYY-MM-DD, 'due'|'text', 時刻, 種類, 終わりの日), ...]。終わりの日は、複数日の予定のときだけ（その範囲の全日に行が入る）。
-    due = frontmatterの start〜due（TickTickの期日）、text = 本文から読み取った日付。
+    due = frontmatterの start〜due（TickTickの日付）、text = 本文から読み取った日付。
     時刻は '' / 'HH:MM' / 'HH:MM-HH:MM'（範囲）。種類は 'event'（予定）/ 'deadline'（締切）/ ''（本文の日付だけ）"""
     out = set()
     try:
@@ -133,7 +133,7 @@ def note_dates(meta, body):
         pass
     anchor = datetime.fromisoformat(meta["created"]).date()
     body = without_recap(body)  # 振り返りの節の日付は、読まない
-    # 本文中の「!10/8」「!明日」は、期日として扱う（! の直後の語だけを日付として読む）
+    # 本文中の「!10/8」「!明日」は、日付として扱う（! の直後の語だけを日付として読む）
     text = FENCE_RE.sub("", body)
     for m in BANG_DUE_RE.finditer(text):
         for d in extract_dates(m.group(1), anchor):
@@ -207,13 +207,13 @@ def db():
 
 
 def _due_time(meta):
-    """期日に時刻があれば "HH:MM"（終日・時刻なしは ""）"""
+    """日付に時刻があれば "HH:MM"（終日・時刻なしは ""）"""
     d = meta.get("due", "")
     return d[11:16] if len(d) >= 16 and d[10] == "T" and meta.get("allday") != "yes" else ""
 
 
 def _notify_due(meta, body):
-    """通知に使う期日: メモの期日（時刻つきなら "YYYY-MM-DDTHH:MM"）。無ければ本文の「!10/8」（終日）"""
+    """通知に使う日付: メモの日付（時刻つきなら "YYYY-MM-DDTHH:MM"）。無ければ本文の「!10/8」（終日）"""
     d = meta.get("due", "")
     if d:
         t = _due_time(meta)
@@ -236,7 +236,7 @@ def _repeat(meta):
 
 
 def _event(meta):
-    """予定の印。"" = 締切（ふつうの期日）/ "1" = 予定 / "HH:MM" = 予定で、終わりの時刻つき。壊れた値は ""（予定にしない）"""
+    """予定の印。"" = 締切（ふつうの日付）/ "1" = 予定 / "HH:MM" = 予定で、終わりの時刻つき。壊れた値は ""（予定にしない）"""
     v = str(meta.get("event", "")).strip()
     return v if v == "1" or re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", v) else ""
 
@@ -259,7 +259,7 @@ def _list(meta):
 
 
 def _kind(meta):
-    """ノート("note")かタスク("task")か。kind: があればそれ。無ければ status: か期日があるものはタスク、どちらも無いものはノート（TickTick の取り込み結果と同じ。ノートには期日が無い）"""
+    """ノート("note")かタスク("task")か。kind: があればそれ。無ければ status: か日付があるものはタスク、どちらも無いものはノート（TickTick の取り込み結果と同じ。ノートには日付が無い）"""
     v = str(meta.get("kind", "")).strip()
     if v in ("note", "task"):
         return v
@@ -358,7 +358,7 @@ def _row(r, with_body=False):
         "done": bool(r["done"]),
         "pinned": r["pinned"] or "",  # ピン留めした日時（空 = ピン留めなし）
         "priority": r["priority"] or 0,
-        "due_time": r["due_time"] or "",   # 期日の時刻 "HH:MM"（終日は ""）
+        "due_time": r["due_time"] or "",   # 日付の時刻 "HH:MM"（終日は ""）
         "remind": r["remind"] or "",       # リマインダーの設定（frontmatterの文字列。"" = 既定）
         "sort": r["sortv"],                # 手動の並べ替えの位置（None = 未設定）
         "repeat": r["rrule"] or "",         # 繰り返しの決まり（"" = 繰り返さない）。例 FREQ=WEEKLY;BYDAY=TU
@@ -395,7 +395,7 @@ def _filters(tag="", done="all", view="all", today="", date_="", src="due,text")
         sql += " AND n.id IN (SELECT note_id FROM tags WHERE tag=? OR tag LIKE ? ESCAPE '\\')"
         args += [tag, _like_escape(tag) + "/%"]
     srcs = [s for s in src.split(",") if s in ("due", "text")]
-    vsrcs = srcs or ["due", "text"]  # 今日・次の7日は、作成日/更新日の指定の時も期日＋本文で判定する
+    vsrcs = srcs or ["due", "text"]  # 今日・次の7日は、作成日/更新日の指定の時も日付＋本文で判定する
     if view == "today" and today:
         sql += " AND n.id IN (SELECT note_id FROM dates WHERE d=? AND src IN (%s))" % ",".join("?" * len(vsrcs))
         args += [today] + vsrcs
@@ -404,7 +404,7 @@ def _filters(tag="", done="all", view="all", today="", date_="", src="due,text")
         sql += " AND n.id IN (SELECT note_id FROM dates WHERE d>=? AND d<=? AND src IN (%s))" % ",".join("?" * len(vsrcs))
         args += [today, end] + vsrcs
     elif view == "overdue" and today:
-        # 期限切れ = TickTickの期日が今日より前で、まだ終わっていないもの（本文中の日付は数えない）
+        # 期限切れ = TickTickの日付が今日より前で、まだ終わっていないもの（本文中の日付は数えない）
         sql += (" AND n.done=0 AND n.kind!='note' AND n.event='' AND n.id IN (SELECT note_id FROM dates WHERE src='due' GROUP BY note_id HAVING MAX(d)<?)")
         args.append(today)
     elif view == "nodate":
@@ -497,7 +497,7 @@ def get_note(nid):
         if not r:
             return None
         d = _row(r, True)
-        d["due_set"] = r["due_set"] or ""  # 日付ピッカーに出す「メモに設定した期日」（本文の !10/8 は含めない）
+        d["due_set"] = r["due_set"] or ""  # 日付ピッカーに出す「メモに設定した日付」（本文の !10/8 は含めない）
         d["dates"] = [[x["d"], x["src"], x["t"] or "", x["k"] or "", x["u"] or ""] for x in db().execute(
             "SELECT d, src, t, k, u FROM dates WHERE note_id=? ORDER BY d, t", (r["id"],))]
         return d
@@ -592,13 +592,13 @@ def add_recap_line(body, ymd, text):
 
 
 def update_note(nid, body, due=None, base=None, status=None, pinned=None, priority=None, reminder=None, sort=None, event=None, start=None, repeat=None, list_=None, kind=None, completed=None):
-    """due: None=変えない / ""=期日を消す / "YYYY-MM-DD"=その日を期日にする
-    status: None=変えない / "done"=完了にする / "abandoned"=中止（キャンセル）にする / "open"=完了・中止を戻す。繰り返すメモは、完了も中止も、期日が次の回へ進む（中止は完了日が付かない）
+    """due: None=変えない / ""=日付を消す / "YYYY-MM-DD"=その日を締切にする
+    status: None=変えない / "done"=完了にする / "abandoned"=中止（キャンセル）にする / "open"=完了・中止を戻す。繰り返すメモは、完了も中止も、日付が次の回へ進む（中止は完了日が付かない）
     pinned: None=変えない / True=ピン留め / False=ピン留めを外す
     priority: None=変えない / 0=なし / 1=低 / 3=中 / 5=高
     reminder: None=変えない / ""=既定に戻す / "none"=通知しない / "-PT10M / PT0S" のような長さの列
-    repeat: None=変えない / ""=繰り返しをやめる / "FREQ=WEEKLY;BYDAY=TU" のような決まり。繰り返すメモを status="done" にすると、完了ではなく、期日が次の回へ進む
-    start: None=変えない / ""=複数日をやめる / "YYYY-MM-DD"=この日から期日（終わりの日）までの、複数日にする（期日を設定したあとに適用）
+    repeat: None=変えない / ""=繰り返しをやめる / "FREQ=WEEKLY;BYDAY=TU" のような決まり。繰り返すメモを status="done" にすると、完了ではなく、日付が次の回へ進む
+    start: None=変えない / ""=複数日をやめる / "YYYY-MM-DD"=この日から日付（終わりの日）までの、複数日にする（日付を設定したあとに適用）
     event: None=変えない / ""=締切に戻す / "1"=予定にする / "HH:MM"=予定にして、終わりの時刻も持つ（予定は、過ぎても「期限切れ」にならない）
     list_: None=変えない / ""=リストなし（受信箱） / "リスト" / "フォルダ/リスト"（2階層まで）
     kind: None=変えない / "task" / "note"（完了を付けても、種類は変わらない）
@@ -624,12 +624,12 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
             if kind not in ("note", "task"):
                 raise ValueError("種類は note / task のどちらかです")
             meta["kind"] = kind
-            if kind == "note":  # ノートは、期日・予定・繰り返しを持たない（日付を付けたら、タスクになる）
+            if kind == "note":  # ノートは、日付・予定・繰り返しを持たない（日付を付けたら、タスクになる）
                 for k in ("due", "start", "allday", "reminder", "event", "repeat"):
                     meta.pop(k, None)
         elif "kind" not in meta and ((status is not None and (meta.get("status") or "open") != status)
                                      or (due is not None and due != meta.get("due", ""))):
-            # kind: を持たない古いメモ。期日を付けたらタスク（ノートには期日が無い）。期日を消す・完了にするときは、いまの種類を書き留める
+            # kind: を持たない古いメモ。日付を付けたらタスク（ノートには日付が無い）。日付を消す・完了にするときは、いまの種類を書き留める
             meta["kind"] = "task" if due else _kind(meta)
         if list_ is not None:
             ln = norm_list(list_)
@@ -669,9 +669,9 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
                     datetime.strptime(due, "%Y-%m-%dT%H:%M")
                     meta["allday"] = "no"
                 else:
-                    raise ValueError("期日の形式が不正です")
+                    raise ValueError("日付の形式が不正です")
                 meta["due"] = due
-                meta["kind"] = "task"  # 期日を付けたノートは、タスクになる
+                meta["kind"] = "task"  # 日付を付けたノートは、タスクになる
                 meta.pop("start", None)
                 # 終日 ⇄ 時刻つき を切り替えたら、リマインダーは既定に戻す（「10分前」は、終日では意味が変わってしまうため）
                 if before[0] and before[2] != meta["allday"] and reminder is None:
@@ -690,7 +690,7 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
                 s0 = date.fromisoformat(start)  # 不正な値は ValueError
                 end = meta.get("due", "")[:10]
                 if not end:
-                    raise ValueError("先に期日（終わりの日）を決めてください")
+                    raise ValueError("先に日付（終わりの日）を決めてください")
                 if s0 > date.fromisoformat(end):
                     raise ValueError("開始日が、終わりの日より後です")
                 meta["start"] = start if s0 < date.fromisoformat(end) else None
@@ -707,14 +707,14 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
                 if not mins:
                     raise ValueError("リマインダーの形式が不正です")
                 meta["reminder"] = reminders.raw_from_minutes(mins)
-        # 完了・中止は、期日・繰り返しなどを反映したあとで行う（端末で、期日や繰り返しを決めてから完了するまでが、1回の送信にまとまることがあるため）
+        # 完了・中止は、日付・繰り返しなどを反映したあとで行う（端末で、日付や繰り返しを決めてから完了するまでが、1回の送信にまとまることがあるため）
         if status is not None:
             if status not in ("done", "open", "abandoned"):
                 raise ValueError("status は done / open / abandoned のどれかです")
             rule = recur.parse(meta.get("repeat")) if status in ("done", "abandoned") else None
             nxt = None
             if rule and meta.get("due") and meta.get("status") not in ("done", "abandoned"):
-                # 繰り返すメモの完了・中止: 終わりにせず、期日を次の回へ進める（時刻・開始日からの長さ・予定の印はそのまま）。中止は「この回をスキップ」で、完了日（実績）は付かない
+                # 繰り返すメモの完了・中止: 終わりにせず、日付を次の回へ進める（時刻・開始日からの長さ・予定の印はそのまま）。中止は「この回をスキップ」で、完了日（実績）は付かない
                 old_due = date.fromisoformat(meta["due"][:10])
                 nxt = recur.advance(rule, old_due, date.fromisoformat(now_iso()[:10]))
             if nxt:

@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:  # Windows �
     check("5件が入る", len(notes) == 5, list(notes))
     a = store.get_note(notes["見積もりを送る"]["id"])
     check("フォルダ/リスト が list: になる", a["list"] == "仕事/営業", a["list"])
-    check("タスク・優先度・期日・タグ", a["kind"] == "task" and a["priority"] == 5 and a["due"] == "2026-10-20" and "急ぎ" in a["tags"], a)
+    check("タスク・優先度・日付・タグ", a["kind"] == "task" and a["priority"] == 5 and a["due"] == "2026-10-20" and "急ぎ" in a["tags"], a)
     check("本文に「リスト/」のタグが付かない", all(not t.startswith("リスト") for t in a["tags"]), a["tags"])
     b = store.get_note(notes["牛乳"]["id"])
     check("完了: 完了日が付く", b["done"] and not b["abandoned"] and b["completed"].startswith("2026-10-03"), b)

@@ -32,7 +32,7 @@ check("消した直後、端末側には『消えた』と通知される", a in
 
 r = store.restore_note(a)
 check("戻せる", r and r["id"] == a and r["body"] == before["body"], r)
-check("期日・時刻・リマインダー・ピン・優先度も、そのまま戻る",
+check("日付・時刻・リマインダー・ピン・優先度も、そのまま戻る",
       r["due_set"] == "2026-10-20" and r["due_time"] == "15:30" and r["remind"] == "-PT10M" and r["pinned"] and r["priority"] == 5, r)
 check("タグも戻る", "仕事" in r["tags"])
 check("ゴミ箱から消える", [t["id"] for t in store.list_trash()] == [b])

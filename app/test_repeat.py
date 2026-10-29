@@ -33,11 +33,11 @@ except ValueError:
 
 # --- 完了 → 次の回へ ---
 r = store.update_note(a, "ゴミ出し", status="done")
-check("完了すると、期日が翌日の同じ時刻に進む", r["due"] == iso(today + timedelta(days=1)) and r["due_time"] == "08:00", r)
+check("完了すると、日付が翌日の同じ時刻に進む", r["due"] == iso(today + timedelta(days=1)) and r["due_time"] == "08:00", r)
 check("完了にはならない", r["done"] is False)
 check("最後に完了した日時が残る", "last_done:" in store._path_of(a).read_text(encoding="utf-8"))
 check("同じ時刻・リマインダーが保たれる", r["due_time"] == "08:00")
-check("期日が今日より先なので、期限切れには出ない", not any(x["id"] == a for x in store.list_notes(view="overdue", today=iso(today))))
+check("日付が今日より先なので、期限切れには出ない", not any(x["id"] == a for x in store.list_notes(view="overdue", today=iso(today))))
 
 # --- 遅れて完了: 過ぎた回を飛ばす ---
 b = store.create_note("毎日の薬")["id"]
@@ -52,11 +52,11 @@ store.update_note(c, "ふつう", due=iso(today))
 r = store.update_note(c, "ふつう", status="done")
 check("繰り返さないメモは、完了になる", r["done"] is True and r["due"] == iso(today), r)
 
-# --- 期日が無い繰り返しは、ふつうに完了 ---
-d = store.create_note("期日なし")["id"]
-store.update_note(d, "期日なし", repeat="FREQ=WEEKLY")
-r = store.update_note(d, "期日なし", status="done")
-check("期日が無ければ、完了になる", r["done"] is True, r)
+# --- 日付が無い繰り返しは、ふつうに完了 ---
+d = store.create_note("日付なし")["id"]
+store.update_note(d, "日付なし", repeat="FREQ=WEEKLY")
+r = store.update_note(d, "日付なし", status="done")
+check("日付が無ければ、完了になる", r["done"] is True, r)
 
 # --- UNTIL を過ぎたら、完了になる ---
 e = store.create_note("期限つき")["id"]
