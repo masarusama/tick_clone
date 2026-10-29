@@ -591,7 +591,7 @@ def add_recap_line(body, ymd, text):
     return "\n".join(lines) + "\n"
 
 
-def update_note(nid, body, due=None, base=None, status=None, pinned=None, priority=None, reminder=None, sort=None, event=None, start=None, repeat=None, list_=None, kind=None):
+def update_note(nid, body, due=None, base=None, status=None, pinned=None, priority=None, reminder=None, sort=None, event=None, start=None, repeat=None, list_=None, kind=None, completed=None):
     """due: None=変えない / ""=期日を消す / "YYYY-MM-DD"=その日を期日にする
     status: None=変えない / "done"=完了にする / "abandoned"=中止（キャンセル）にする / "open"=完了・中止を戻す。繰り返すメモは、完了も中止も、期日が次の回へ進む（中止は完了日が付かない）
     pinned: None=変えない / True=ピン留め / False=ピン留めを外す
@@ -602,6 +602,7 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
     event: None=変えない / ""=締切に戻す / "1"=予定にする / "HH:MM"=予定にして、終わりの時刻も持つ（予定は、過ぎても「期限切れ」にならない）
     list_: None=変えない / ""=リストなし（受信箱） / "リスト" / "フォルダ/リスト"（2階層まで）
     kind: None=変えない / "task" / "note"（完了を付けても、種類は変わらない）
+    completed: None か "" =変えない / "YYYY-MM-DD"（または "YYYY-MM-DDTHH:MM"）= 完了したメモの、完了日を、この日にする（あとから思い出して完了にしたとき用）
     sort: None=変えない / 数=手動の並べ替えの位置（小さいほど上。これだけの変更では updated は変わらない）
     due は "YYYY-MM-DD"（終日）か "YYYY-MM-DDTHH:MM"（時刻つき・日本時間）
     base: 端末が編集の元にした版の updated。サーバー側がそれより進んでいたら Conflict"""
@@ -612,7 +613,7 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
         meta, old = parse_file(p.read_text(encoding="utf-8"))
         if base is not None and meta.get("updated") != base and old != body:
             raise Conflict(get_note(nid))
-        before = (meta.get("due"), meta.get("start"), meta.get("allday"), meta.get("status"), meta.get("pinned"), meta.get("priority"), meta.get("reminder"), meta.get("event"), meta.get("repeat"), meta.get("last_done"), meta.get("last_cancelled"), meta.get("list"), meta.get("kind"))
+        before = (meta.get("due"), meta.get("start"), meta.get("allday"), meta.get("status"), meta.get("pinned"), meta.get("priority"), meta.get("reminder"), meta.get("event"), meta.get("repeat"), meta.get("last_done"), meta.get("last_cancelled"), meta.get("list"), meta.get("kind"), meta.get("completed"))
         sort_before = meta.get("sort")
         if sort is not None:
             # 手動の並べ替えの位置（小さいほど上）。有限の数だけ。更新日は変えない（並べ替えは、メモの編集ではないため）
@@ -735,7 +736,13 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
                 else:
                     meta.pop("completed", None)
                     meta.pop("cancelled", None)
-        same_other = old == body and before == (meta.get("due"), meta.get("start"), meta.get("allday"), meta.get("status"), meta.get("pinned"), meta.get("priority"), meta.get("reminder"), meta.get("event"), meta.get("repeat"), meta.get("last_done"), meta.get("last_cancelled"), meta.get("list"), meta.get("kind"))
+        if completed:
+            if not re.fullmatch(r"\d{4}-\d\d-\d\d(T\d\d:\d\d)?", completed):
+                raise ValueError("完了日の形式が不正です")
+            date.fromisoformat(completed[:10])
+            if meta.get("status") == "done":
+                meta["completed"] = completed
+        same_other = old == body and before == (meta.get("due"), meta.get("start"), meta.get("allday"), meta.get("status"), meta.get("pinned"), meta.get("priority"), meta.get("reminder"), meta.get("event"), meta.get("repeat"), meta.get("last_done"), meta.get("last_cancelled"), meta.get("list"), meta.get("kind"), meta.get("completed"))
         if same_other and meta.get("sort") == sort_before:
             return get_note(nid)
         meta["id"] = nid

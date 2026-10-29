@@ -655,7 +655,8 @@ export function setPriority(id, p) {
 }
 
 // done: 終わりにする / 戻す。cancel: 「中止（キャンセル）」として終わりにする（完了日＝実績には数えない）
-export function setDone(id, done, cancel = false) {
+// when: 完了日を、この日（"YYYY-MM-DD"）にする（あとから思い出して完了にしたとき・過ぎた予定を予定日に完了にするとき）。省略 = いま
+export function setDone(id, done, cancel = false, when = "") {
   const n = notes.get(id);
   if (!n || n.done === done) return n || null;
   const rule = done && n.repeat && n.due_set ? parseRule(n.repeat) : null;
@@ -675,11 +676,23 @@ export function setDone(id, done, cancel = false) {
   n.done = done;
   n.abandoned = !!(done && cancel);
   n.status = done ? (cancel ? "abandoned" : "done") : "open";
-  n.completed = done && !cancel ? nowIso().slice(0, 16) : ""; // 完了した日時（サーバーも同じ。中止には付けない）
+  n.completed = done && !cancel ? when || nowIso().slice(0, 16) : ""; // 完了した日時（サーバーも同じ。中止には付けない）
   n.cancelled = done && cancel ? nowIso().slice(0, 16) : "";
   n.updated = nowIso();
   touchNote(id);
-  queue(n, { status: n.status });
+  queue(n, { status: n.status, completed: done && !cancel ? when : "" });
+  emit();
+  return n;
+}
+
+// 完了したメモの、完了日だけを変える（"YYYY-MM-DD"）
+export function setCompleted(id, day) {
+  const n = notes.get(id);
+  if (!n || !n.done || n.abandoned || !day || n.completed === day) return n || null;
+  n.completed = day;
+  n.updated = nowIso();
+  touchNote(id);
+  queue(n, { completed: day });
   emit();
   return n;
 }
@@ -726,8 +739,8 @@ async function flush() {
       const v = op.v;
       let r;
       try {
-        if (op.kind === "create") r = await http("POST", "/api/notes", { body: op.body, id: op.id, created: op.created, due: op.due || undefined, status: op.status || undefined, pinned: op.pinned || undefined, priority: op.priority || undefined, reminder: op.reminder || undefined, event: op.event || undefined, start: op.start || undefined, repeat: op.repeat || undefined, list: op.list || undefined, kind: op.nk || undefined, sort: op.sort ?? undefined });
-        else if (op.kind === "put") r = await http("PUT", "/api/notes/" + op.id, { body: op.body, due: op.due, base: op.base, status: op.status || null, pinned: op.pinned ?? null, priority: op.priority ?? null, reminder: op.reminder ?? null, event: op.event ?? null, start: op.start ?? null, repeat: op.repeat ?? null, list: op.list ?? null, kind: op.nk ?? null, sort: op.sort ?? null });
+        if (op.kind === "create") r = await http("POST", "/api/notes", { body: op.body, id: op.id, created: op.created, due: op.due || undefined, status: op.status || undefined, pinned: op.pinned || undefined, priority: op.priority || undefined, reminder: op.reminder || undefined, event: op.event || undefined, start: op.start || undefined, repeat: op.repeat || undefined, list: op.list || undefined, kind: op.nk || undefined, completed: op.completed || undefined, sort: op.sort ?? undefined });
+        else if (op.kind === "put") r = await http("PUT", "/api/notes/" + op.id, { body: op.body, due: op.due, base: op.base, status: op.status || null, pinned: op.pinned ?? null, priority: op.priority ?? null, reminder: op.reminder ?? null, event: op.event ?? null, start: op.start ?? null, repeat: op.repeat ?? null, list: op.list ?? null, kind: op.nk ?? null, completed: op.completed || null, sort: op.sort ?? null });
         else r = await http("DELETE", "/api/notes/" + op.id);
       } catch { return false; } // 通信できない: 残りは次の機会に
       if (r.status >= 500) return false;

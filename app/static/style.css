@@ -332,3 +332,10 @@ body.hassel #list li.cur:not(.msel){box-shadow:none}
 .bc-bar.wrap{white-space:normal;overflow-wrap:anywhere;height:auto;min-height:18px;line-height:16px;padding:1px 5px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3}
 .bc-bar.wrap.two{-webkit-line-clamp:2;line-clamp:2}
 .bc-bar.wrap.one{white-space:nowrap;height:18px;line-height:18px;padding:0 5px;display:block}
+#pastbar{position:fixed;left:50%;bottom:160px;transform:translateX(-50%);z-index:61;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:#1f2430;color:#fff;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.35);max-width:94vw;flex-wrap:wrap}
+#pastbar[hidden]{display:none}
+#pastbar button{font-size:12px;padding:3px 9px;cursor:pointer}
+#pastbar #pastdone{background:var(--accent);color:#fff;border:0;border-radius:6px}
+@media (pointer:coarse){#pastbar button{padding:7px 11px;font-size:14px}}
+#recapbar [hidden]{display:none}
+#list li.pastev{opacity:.55}

@@ -42,6 +42,7 @@ class Body(BaseModel):
     reminder: str | None = None  # None=変えない / ""=既定 / "none"=通知しない / "-PT10M / PT0S" など
     list: str | None = None     # None=変えない / ""=リストなし / "リスト" / "フォルダ/リスト"
     kind: str | None = None     # None=変えない / "task" / "note"
+    completed: str | None = None  # 完了日（"YYYY-MM-DD"）。完了したメモの完了日を、この日にする
     sort: float | None = None    # None=変えない / 手動の並べ替えの位置（小さいほど上）
     base: str | None = None     # 端末が編集の元にした版の updated（競合の検出用）
     id: str | None = None       # 端末で先に作ったメモの id（作成時のみ）
@@ -187,9 +188,9 @@ def create_note(b: Body):
     except ValueError as e:
         raise HTTPException(400, str(e))
     lst = b.list or (_route("note") if b.kind == "note" else "")  # ノートとして作られ、リストが未設定なら、「ノートを自動で入れる」リストへ（Chrome拡張・共有からのメモも）
-    if b.due or b.status or b.pinned or b.priority or b.reminder or b.event or b.start or b.repeat or lst or b.kind or b.sort is not None:  # 端末で期日・完了・ピン留め・優先度・リマインダー・並び順を付けてから作ったメモ
+    if b.due or b.status or b.pinned or b.priority or b.reminder or b.event or b.start or b.repeat or lst or b.kind or b.completed or b.sort is not None:  # 端末で期日・完了・ピン留め・優先度・リマインダー・並び順を付けてから作ったメモ
         try:
-            n = store.update_note(n["id"], b.body, b.due, None, b.status, b.pinned, b.priority, b.reminder, b.sort, b.event, b.start, b.repeat, lst, b.kind) or n
+            n = store.update_note(n["id"], b.body, b.due, None, b.status, b.pinned, b.priority, b.reminder, b.sort, b.event, b.start, b.repeat, lst, b.kind, b.completed) or n
         except ValueError as e:
             raise HTTPException(400, str(e))
     return n
@@ -453,7 +454,7 @@ def get_note(nid: str):
 @app.put("/api/notes/{nid}")
 def update_note(nid: str, b: Body):
     try:
-        return _need(store.update_note(nid, b.body, b.due, b.base, b.status, b.pinned, b.priority, b.reminder, b.sort, b.event, b.start, b.repeat, b.list, b.kind))
+        return _need(store.update_note(nid, b.body, b.due, b.base, b.status, b.pinned, b.priority, b.reminder, b.sort, b.event, b.start, b.repeat, b.list, b.kind, b.completed))
     except store.Conflict as c:
         return JSONResponse(status_code=409, content={"conflict": True, "server": c.note})
     except ValueError as e:

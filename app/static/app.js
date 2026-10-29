@@ -647,6 +647,35 @@ function autoFile(id) {
   const extra = enterList(id, f.to);
   return `（フィルター「${f.name}」のルールで、リスト「${f.to}」へ入れました）` + extra;
 }
+// 過ぎた予定: 予定の印があり、期日（複数日なら終わりの日）が今日より前で、まだ完了にしていないもの
+const isPastEvent = (n) => !!n && n.kind !== "note" && !n.done && !!n.event && !!n.due_set && n.due_set < todayStr();
+// 過ぎた予定の案内（1日1回）: 予定日に完了にする / 中止にする / そのまま
+const pastBar = Object.assign(document.createElement("div"), { id: "pastbar", hidden: true });
+pastBar.innerHTML = '<span id="pastmsg"></span><button id="pastdone" type="button" title="完了日を、それぞれの予定日にします">予定日に完了にする</button><button id="pastcancel" type="button" title="やらなかった・行かなかった予定を、中止にします">中止にする</button><button id="pastclose" type="button" title="そのまま（今日は、もう出しません）">そのまま</button>';
+document.body.append(pastBar);
+let pastIds = [];
+function offerPastEvents() {
+  const today = todayStr();
+  if (state.batch || pref.get("pastDay", "") === today) return;
+  const ns = D.all().filter(isPastEvent);
+  if (!ns.length) return;
+  pref.set("pastDay", today);
+  pastIds = ns.map((n) => n.id);
+  const first = ns.sort((a, b) => (b.due_set > a.due_set ? 1 : -1))[0];
+  $("pastmsg").textContent = `過ぎた予定が ${ns.length}件 あります（「${first.title || "（空のメモ）"}」など）。`;
+  pastBar.hidden = false;
+}
+$("pastclose").onclick = () => { pastBar.hidden = true; };
+$("pastdone").onclick = async () => {
+  pastBar.hidden = true;
+  await runBatch(pastIds, (id) => { const n = D.get(id); if (isPastEvent(n)) D.setDone(id, true, false, n.due_set); }, "過ぎた予定を、予定日に完了にしました");
+  await refresh();
+};
+$("pastcancel").onclick = async () => {
+  pastBar.hidden = true;
+  await runBatch(pastIds, (id) => { if (isPastEvent(D.get(id))) D.setDone(id, true, true); }, "過ぎた予定を、中止にしました");
+  await refresh();
+};
 // 1日1回（アプリを開いたとき）: ①締切が近づいたタスクを移す ②リスト未設定のメモに、フィルターのルールを当てはめる。「元に戻す」が出る
 let dailyBusy = false;
 async function maybeDaily() {
@@ -666,6 +695,7 @@ async function maybeDaily() {
       for (const n of D.all()) { if (n.list) continue; const f = rules.find((r) => D.filterMatch(n, r, today)); if (f) hit.set(n.id, f); }
       if (hit.size) await runBatch([...hit.keys()], (id) => actList(id, hit.get(id).to), "フィルターのルールで、リスト未設定のメモを、リストへ入れました");
     }
+    offerPastEvents();
   } finally { dailyBusy = false; }
 }
 // 日付ピッカーで期日を選んだあと: リスト未設定なら、予定の印があれば「予定」、無ければ「締切」のリストへ入れる
@@ -1192,7 +1222,7 @@ function render() {
         if (k === "rest" && !hasPinned) { /* ピン留めが無いときの「そのほか」は出さない */ } else heads.push(groupHead(k));
       }
       const li = document.createElement("li");
-      li.className = (i === state.sel ? "sel " : "") + (n.id === state.cur ? "cur " : "") + (state.selIds.has(n.id) ? "msel " : "") + (n.done ? "done" : "");
+      li.className = (i === state.sel ? "sel " : "") + (n.id === state.cur ? "cur " : "") + (state.selIds.has(n.id) ? "msel " : "") + (n.done ? "done" : "") + (isPastEvent(n) ? " pastev" : "");
       li.dataset.id = n.id;
       li.draggable = true;
       li.addEventListener("dragstart", (e) => startDrag(e, n, li));
@@ -2447,15 +2477,24 @@ async function writeRecap(id) {
   const bl = blockEls().filter((b) => !b.classList.contains("blank"));
   if (bl.length) beginEdit(bl.at(-1), "end"); // 末尾の「- 日付 」の行に、カーソルを置く
 }
+// 完了日を、実際に終わった日に直す（あとから完了ボタンを押したとき）。振り返りの行の日付は、書いた日のまま
+async function actCompleted(id, day) {
+  if (id === state.cur) await flush();
+  D.setCompleted(id, day);
+  recapBar.hidden = true;
+  setStatus(`完了日を ${day} にしました（カレンダーの「完了日」は、この日に出ます）`);
+  await refresh();
+}
 // 完了・中止にした直後の、小さな案内（任意。「今後は出さない」で、オフにできる）
 const recapBar = Object.assign(document.createElement("div"), { id: "recapbar", hidden: true });
-recapBar.innerHTML = '<span id="recapmsg"></span><button id="recapgo" type="button">振り返りを書く</button><button id="recapoff" type="button" title="この案内を、今後は出さない（メモのメニューで、またオンにできます）">今後は出さない</button><button id="recapclose" type="button" title="閉じる">×</button>';
+recapBar.innerHTML = '<span id="recapmsg"></span><button id="recapgo" type="button">振り返りを書く</button><button id="recapdate" type="button" title="完了日を、実際に終わった日に直します">完了日を変える</button><button id="recapoff" type="button" title="この案内を、今後は出さない（メモのメニューで、またオンにできます）">今後は出さない</button><button id="recapclose" type="button" title="閉じる">×</button>';
 document.body.append(recapBar);
 let recapTimer = null, recapId = null;
 function offerRecap(id, what) {
   const n = D.get(id);
   if (state.batch || !pref.get("recapPrompt", true) || !n || n.kind === "note") return;
   recapId = id;
+  $("recapdate").hidden = what === "中止" || !!n.repeat; // 完了日を直せるのは、完了（実績）だけ。繰り返しは、完了日を持たない
   $("recapmsg").textContent = (what === "中止" ? "中止にしました。理由などを、" : "完了しました。") + "振り返りに残しますか？";
   recapBar.hidden = false;
   clearTimeout(recapTimer);
@@ -2463,6 +2502,7 @@ function offerRecap(id, what) {
 }
 $("recapgo").onclick = () => { if (recapId) writeRecap(recapId); };
 $("recapclose").onclick = () => { recapBar.hidden = true; };
+$("recapdate").onclick = () => { if (!recapId) return; const r = $("recapdate").getBoundingClientRect(); pickDate(recapId, { x: r.left, y: r.top - 280 > 0 ? r.top - 280 : r.bottom }, (v) => actCompleted(recapId, v)); };
 $("recapoff").onclick = () => { pref.set("recapPrompt", false); recapBar.hidden = true; setStatus("完了後の「振り返り」の案内を、オフにしました（メモのメニューで、またオンにできます）"); };
 
 // 一段落して次へ: 完了にせず、振り返りへ「- 日付 ✓ 」の行を足して、期日を次の区切りへ進める（1つのタスクを、続いていく流れとして使う）
@@ -2873,6 +2913,7 @@ function noteMenu(id) {
     { sep: true },
     { label: "編集", icon: "✏️", key: "e", run: async () => { await open(id); togglePreview(false); } },
     { label: "振り返りを書く", icon: "📝", run: () => writeRecap(id) },
+    ...(n.done && !n.abandoned ? [{ label: n.completed ? `完了日を変える（いま ${n.completed.slice(0, 10)}）…` : "完了日を決める…", icon: "✅", run: (pos) => pickDate(id, pos, (v) => actCompleted(id, v)) }] : []),
     { label: "ファイルを添付…", icon: "📎", run: async () => { await open(id); $("filepick").click(); } },
     { label: "リンクにタイトルを付ける", icon: "🔗", run: () => actLinkTitles(id) },
     { label: "コピー", icon: "📋", sub: [
