@@ -99,7 +99,7 @@ def label(before, allday):
         tod = notify - day * 1440
         dw = "当日" if day == 0 else "前日" if day == -1 else f"{-day}日前" if day < 0 else f"{day}日後"
         return dw + "の" + ("朝9:00" if tod == 540 else f"{tod // 60}:{tod % 60:02d}")
-    if before == 0: return "期日の時刻に"
+    if before == 0: return "予定の時刻に"
     if before == 1440: return "前日の同じ時刻"
     return _span(abs(before)) + ("前" if before > 0 else "後")
 

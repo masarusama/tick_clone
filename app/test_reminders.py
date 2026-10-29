@@ -40,7 +40,7 @@ check("終日の前日朝9時 = 900分前", ft("2026-10-12", "-PT900M") == [("10
 check("期日が壊れていたら通知なし", ft("2026-13-45") == [] and ft("") == [])
 check("ラベル: 終日の長い前（9540分前=7日前の朝9:00）", R.label(9540, True) == "7日前の朝9:00" and R.label(3780, True) == "3日前の朝9:00" and R.label(900, True) == "前日の朝9:00" and R.label(2340, True) == "2日前の朝9:00", (R.label(9540, True), R.label(3780, True)))
 check("ラベル: 時刻つきの長い前（6日15時間前・1時間30分前・1時間30分後）", R.label(9540, False) == "6日15時間前" and R.label(90, False) == "1時間30分前" and R.label(-90, False) == "1時間30分後" and R.label(2880, False) == "2日前", (R.label(9540, False), R.label(90, False)))
-check("ラベル", R.label(-540, True) == "当日の朝9:00" and R.label(10, False) == "10分前" and R.label(60, False) == "1時間前" and R.label(1440, False) == "前日の同じ時刻" and R.label(0, False) == "期日の時刻に")
+check("ラベル", R.label(-540, True) == "当日の朝9:00" and R.label(10, False) == "10分前" and R.label(60, False) == "1時間前" and R.label(1440, False) == "前日の同じ時刻" and R.label(0, False) == "予定の時刻に")
 
 # --- 保存（store）---
 store.init_git()

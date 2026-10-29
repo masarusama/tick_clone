@@ -573,7 +573,7 @@ export function remindLabel(b, allday) {
     const dw = day === 0 ? "当日" : day === -1 ? "前日" : day < 0 ? `${-day}日前` : `${day}日後`;
     return dw + "の" + (tod === 540 ? "朝9:00" : `${Math.floor(tod / 60)}:${String(tod % 60).padStart(2, "0")}`);
   }
-  if (b === 0) return "期日の時刻に";
+  if (b === 0) return "予定の時刻に";
   if (b === 1440) return "前日の同じ時刻";
   const m = Math.abs(b), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mi = m % 60; // 「6日15時間」「1時間30分」「10分」
   return (d ? `${d}日` : "") + (h ? `${h}時間` : "") + (mi ? `${mi}分` : "") + (b > 0 ? "前" : "後");

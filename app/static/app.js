@@ -2711,7 +2711,7 @@ function remindOptions(n) {
   if (!n.due_set) return [];
   if (!n.due_time) return [[D.DEFAULT_ALLDAY, "当日の朝9:00"], [900, "前日の朝9:00"], [2340, "2日前の朝9:00"]];
   const tmin = +n.due_time.slice(0, 2) * 60 + +n.due_time.slice(3, 5);
-  return [[0, "期日の時刻に"], [5, "5分前"], [10, "10分前"], [30, "30分前"], [60, "1時間前"], [1440, "前日の同じ時刻"], [900 + tmin, "前日の朝9:00"]];
+  return [[0, "予定の時刻に"], [5, "5分前"], [10, "10分前"], [30, "30分前"], [60, "1時間前"], [1440, "前日の同じ時刻"], [900 + tmin, "前日の朝9:00"]];
 }
 
 async function actRemind(id, raw) {
@@ -2741,7 +2741,7 @@ function remindMenu(id) {
   return [
     ...items, { sep: true },
     { label: "通知しない", icon: off ? "●" : "○", run: () => actRemind(id, "none") },
-    { label: "既定に戻す（" + (allday ? "当日の朝9:00" : "期日の時刻に") + "）", icon: !explicit ? "●" : "○", run: () => actRemind(id, "") },
+    { label: "既定に戻す（" + (allday ? "当日の朝9:00" : "予定の時刻に") + "）", icon: !explicit ? "●" : "○", run: () => actRemind(id, "") },
   ];
 }
 
