@@ -1120,7 +1120,29 @@ function dueLabel(n) {
   return (n.due < t && !n.done && !n.event ? "⚠ " : n.event ? "🗓 " : "📅 ") + `${n.start ? fmtDue(n.start) + "〜" : ""}${fmtDue(n.due)}${time}${bell}${n.repeat ? " 🔁" : ""}`;
 }
 
+// 上の帯の右に、開いているメモのリスト名を出す（押すと、リストを変えるメニュー）
+function updateListChip() {
+  const chip = $("listchip");
+  const n = state.cur ? D.get(state.cur) : null;
+  const name = n ? n.list || "" : state.list || "";
+  chip.hidden = !(n || name) || document.body.classList.contains("noedit");
+  chip.textContent = "📋 " + (name || "受信箱");
+}
+$("listchip").onclick = async () => {
+  if (!state.cur) return;
+  await flush();
+  const n = D.get(state.cur), id = state.cur;
+  const r = $("listchip").getBoundingClientRect();
+  openMenu([
+    { label: "受信箱（リストなし）", icon: !n.list ? "●" : "○", run: () => actList(id, "") },
+    { sep: true },
+    ...orderedLists().slice(0, 30).map((l) => ({ label: l.name, hint: String(l.count), icon: n.list === l.name ? "●" : "○", run: () => actList(id, l.name) })),
+    { sep: true },
+    { label: "新しいリスト…", run: () => newListFor(id) },
+  ], Math.max(8, r.right - 220), r.bottom + 4);
+};
 function render() {
+  updateListChip();
   renderNav();
   renderCal();
   renderBig();
@@ -1260,10 +1282,14 @@ function flush() {
 // 端末に書く（即時・同期処理）。サーバーへは D が裏で送る（オフラインなら送信待ちに溜まる）
 function saveLocal() {
   if (!state.dirty) return false;
-  const body = ed.value;
+  const typed = ed.value;
+  let body = typed;
   state.dirty = false;
   if (!state.cur) {
     if (!body.trim()) { setStatus(""); return false; }
+    state.keepTag = state.newTag; // タグの一覧で作ったメモ: そのタグを付ける（書いている間は、見えない。保存のたびに、末尾へ足す）
+    state.newTag = "";
+    if (state.keepTag && !body.includes("#" + state.keepTag)) body = addTagToBody(body, state.keepTag);
     const kind = state.newDue ? "task" : state.newKind || "task"; // カレンダーの日から作ったメモ（日付つき）は、タスク
     state.cur = D.create(body, state.newDue || "", (state.list && orderedLists().some((l) => l.name === state.list) ? state.list : "") || (kind === "note" ? state.listRoutes.note || "" : ""), kind).id;
     state.newKind = "";
@@ -1271,10 +1297,11 @@ function saveLocal() {
     state.newDue = "";
     state.newTime = "";
   } else {
+    if (state.keepTag && !body.includes("#" + state.keepTag)) body = addTagToBody(body, state.keepTag);
     D.save(state.cur, body);
   }
   const filed = autoFile(state.cur); // 本文のタグなどが、フィルターのルールに当てはまれば、リストへ（リスト未設定のメモだけ）
-  if (ed.value !== body) state.dirty = true; // 念のため（同期処理なので通常は起きない）
+  if (ed.value !== typed) state.dirty = true; // 念のため（同期処理なので通常は起きない）
   else setStatus("保存済み" + filed);
   return true;
 }
@@ -1311,6 +1338,8 @@ async function newNote(kind, due = "") {
   state.newKind = kind === "note" || kind === "task" ? kind : defaultKind();
   if (!due && state.view === "today") due = todayStr(); // 「今日」の一覧で作るメモは、今日の期日（作った途端に一覧から消えないように）
   if (!due && state.view === "calendar" && state.day) due = state.day; // カレンダーで選んでいる日
+  state.keepTag = "";
+  state.newTag = state.tag || ""; // タグの一覧で作るメモには、そのタグを付ける（保存するとき、末尾に足す）
   state.newDue = due; // 期日つきで作るとき（前の、書きかけの日付は引き継がない）
   state.newTime = "";
   state.cur = null;
