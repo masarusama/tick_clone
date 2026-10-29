@@ -2106,6 +2106,12 @@ function enterKey() {
   if (m) {
     if (!before.slice(m[0].length).trim() && !after.trim()) return replaceLines(blk.l, blk.e, [""], 0, 0); // 空の項目でEnter → 箇条書きを終える
     marker = nextMarker(m);
+  } else {
+    const ind = before.match(/^[ \t　]+/); // 字下げした行の改行 → 次の行も、同じ字下げで始める（字下げだけの行で改行すると、字下げを終える）
+    if (ind) {
+      if (!before.slice(ind[0].length).trim() && !after.trim()) return replaceLines(blk.l, blk.e, [""], 0, 0);
+      marker = ind[0];
+    }
   }
   replaceLines(blk.l, blk.e, [before, marker + after], 1, marker.length);
 }
