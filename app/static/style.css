@@ -329,3 +329,6 @@ body.hassel #list li.cur:not(.msel){box-shadow:none}
 }
 #listchip{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 10px;font-size:12px;border-radius:999px;background:transparent;color:var(--sub);border:1px solid var(--line);cursor:pointer}
 #listchip[hidden]{display:none}
+.bc-bar.wrap{white-space:normal;overflow-wrap:anywhere;height:auto;min-height:18px;line-height:16px;padding:1px 5px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3}
+.bc-bar.wrap.two{-webkit-line-clamp:2;line-clamp:2}
+.bc-bar.wrap.one{white-space:nowrap;height:18px;line-height:18px;padding:0 5px;display:block}

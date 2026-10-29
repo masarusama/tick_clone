@@ -974,7 +974,9 @@ function renderBig() {
     }
     for (const it of items[s] || []) {
       if (isSpan(it)) continue;
-      list.append(mkBar(it, (it.time ? it.time + " " : "") + (it.title || "（空のメモ）"))); // 右クリック・長押し → いつものメモのメニュー
+      const b = mkBar(it, (it.time ? it.time + " " : "") + (it.title || "（空のメモ）")); // 右クリック・長押し → いつものメモのメニュー
+      b.classList.add("wrap"); // 1日だけの予定は、マスに余裕があれば、折り返して複数行で見せる（fitBars で調整）
+      list.append(b);
     }
     c.append(top, list);
     c.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s); };
@@ -991,8 +993,13 @@ function fitBars() {
     const list = c.querySelector(".bc-list");
     const bars = [...list.querySelectorAll(".bc-bar")];
     list.querySelector(".bc-more")?.remove();
-    bars.forEach((b) => (b.hidden = false));
+    bars.forEach((b) => { b.hidden = false; b.classList.remove("one", "two"); });
     const room = c.clientHeight - c.querySelector(".bc-top").offsetHeight - 4;
+    const used = () => bars.reduce((t, b) => t + b.offsetHeight + 2, 0);
+    for (const lv of ["two", "one"]) { // 入りきらないマスは、折り返しを 3行 → 2行 → 1行（今までの表示）と減らし、それでもはみ出す分を「+N件」へ
+      if (used() <= room) break;
+      bars.forEach((b) => b.classList.add(lv));
+    }
     const per = (bars[0] ? bars[0].offsetHeight : 18) + 2;
     const cap = Math.max(1, Math.floor(room / per));
     if (bars.length > cap) {
