@@ -2140,6 +2140,16 @@ function wireBlock(ta) {
       if (e.key === "Escape") { hideSuggest(); e.preventDefault(); e.stopPropagation(); return; }
     }
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); commitActive(); previewEl.focus(); return; }
+    if (e.key === "Tab" && !mod) { // Tab = 字下げ（行の頭に空白2つ。箇条書きなら、入れ子）/ Shift+Tab = 戻す
+      e.preventDefault(); e.stopPropagation();
+      if (FENCE.test(ta.value)) { if (!e.shiftKey) { ta.setRangeText("  ", ta.selectionStart, ta.selectionEnd, "end"); syncFromTa(); autosize(ta); } return; } // コードブロックの中は、その場に空白
+      const whole = blk.prefix + ta.value, pos = blk.prefix.length + ta.selectionStart;
+      if (e.shiftKey) {
+        const m0 = whole.match(/^( {1,2}|　|	)/);
+        if (m0) replaceLines(blk.l, blk.e, [whole.slice(m0[0].length)], 0, Math.max(0, pos - m0[0].length));
+      } else replaceLines(blk.l, blk.e, ["  " + whole], 0, pos + 2);
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !mod) { e.preventDefault(); e.stopPropagation(); enterKey(); return; }
     const noSel = ta.selectionStart === ta.selectionEnd;
     if (e.key === "Backspace" && noSel && ta.selectionStart === 0 && blk.prefix && !mod) { // 記号つきの行の行頭 → まず記号だけ外して、普通の文にする
