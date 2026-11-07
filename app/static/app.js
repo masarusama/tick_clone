@@ -1383,7 +1383,7 @@ async function open(id, focus = true) {
 // リストを選んでいない「すべて」などでは、**ノート**（書く時は仕分けしない。日付を付けると、タスクになる）。日付を扱う画面（今日・次の7日間・期限切れ・カレンダー）だけ、タスク
 function defaultKind() {
   if (state.list) return (state.listToNote.includes(state.list) ? "note" : state.listKinds[state.list]) || "task";
-  if (["today", "week", "overdue", "calendar", "bigcal"].includes(state.view)) return "task";
+  if (["today", "overdue", "calendar", "bigcal"].includes(state.view)) return "task";
   return "note";
 }
 async function newNote(kind, due = "") {
@@ -1733,9 +1733,9 @@ function backStep() {
   if (cl.contains("navopen")) { cl.remove("navopen"); return true; }
   if (cl.contains("bigopen")) { $("bc-close").click(); return true; } // 月カレンダー（大）で開いているメモ
   if (cl.contains("editing")) { $("btn-back").click(); return true; } // メモ → 一覧
-  if (state.q || state.tag || state.list || state.inbox || state.filter || state.view !== "all") { // 絞り込み・別の画面 → 「すべて」
+  if (state.q || state.tag || state.list || state.inbox || state.filter || state.view !== "week") { // 絞り込み・別の画面 → 起動時の画面（次の7日間）
     state.q = ""; searchEl.value = "";
-    setView("all");
+    setView("week");
     return true;
   }
   return false;
