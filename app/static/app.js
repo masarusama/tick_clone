@@ -21,7 +21,7 @@ const state = {
   notes: [], tags: [], counts: {}, cal: {}, cur: null, sel: 0, dirty: false,
   selIds: new Set(), selMode: false, anchor: null, batch: 0, dragIds: [], // selMode: 選択モード（タップでメモを選ぶ。スマホ向け） // 複数選択（Ctrl/Shift+クリック）・まとめて操作の最中か・ドラッグ中の複数id
   filter: "", filters: [], // 選んでいる保存した絞り込みの id / 保存した絞り込みの一覧
-  tag: "", q: "", view: "all", list: "", inbox: false, lists: [], inboxCount: 0, // list: 選んでいるリスト（フォルダも可）/ inbox: 受信箱（リスト未設定）を選んでいる            // view: all/today/week/overdue/nodate/calendar/done
+  tag: "", q: "", view: "week", list: "", inbox: false, lists: [], inboxCount: 0, // list: 選んでいるリスト（フォルダも可）/ inbox: 受信箱（リスト未設定）を選んでいる            // view: all/today/week/overdue/nodate/calendar/done
   day: "", month: todayStr().slice(0, 7), calSrc: "due,text", calPanel: "day", // calPanel: day / undated
   showDone: false,
   dragId: null, pendingRefresh: false, // ドラッグ中のメモ
@@ -617,10 +617,11 @@ function listRows() {
   return out;
 }
 
-// 締切/予定にしたメモが、リスト未設定なら、設定したリストへ入れる（手で決めたリストは動かさない）
-function routeList(id, type) {
+// 締切/予定にしたメモが、リスト未設定なら、設定したリストへ入れる（手で決めたリストは動かさない）。
+// fromNote: ノートに日付を付けて、タスクになった瞬間。「ノートを自動で入れる」リスト（資料）にいても、手で決めたリストではなく自動で入ったものなので、動かす
+function routeList(id, type, fromNote = false) {
   const n = D.get(id);
-  if (!n || n.list) return "";
+  if (!n || (n.list && !(fromNote && n.list === state.listRoutes.note))) return "";
   let to = state.listRoutes[type];
   const pr = to && state.listPromote[to]; // 締切が、すでに「近い」なら、遠い締切の置き場（Oneday）ではなく、移し先（具体的な次…）へ直接入れる
   if (to && type === "deadline" && pr && n.due_set && n.due_set <= addDays(pr.days)) to = pr.to;
@@ -697,6 +698,21 @@ async function maybeDaily() {
     }
     offerPastEvents();
   } finally { dailyBusy = false; }
+}
+// ノートに日付を付けてタスクになった直後（どの経路でも）: 予定の印があれば「予定」、無ければ「締切」の入れ先へ。まとめて操作では働かない
+function routeNoteTask(id) {
+  const n = D.get(id);
+  if (state.batch || !n || n.kind !== "task" || !n.due_set) return "";
+  return routeList(id, n.event ? "event" : "deadline", true);
+}
+// 逆向き: 日付を外した未完了のタスクが、締切・予定の入れ先（Oneday・具体的な次…）にいたら、ノートに戻して「ノートを自動で入れる」リスト（資料）へ。確認つき（手で入れたリストのこともあるため）。戻り値: 追加の案内
+function offerBackToNote(id) {
+  const n = D.get(id), home = state.listRoutes.note;
+  const from = new Set([state.listRoutes.deadline, state.listRoutes.event, ...Object.values(state.listPromote).map((p) => p.to)].filter(Boolean));
+  if (state.batch || !home || !n || n.kind !== "task" || n.done || n.due_set || n.repeat || !from.has(n.list)) return "";
+  if (!window.confirm(`日付を外しました。このメモを、ノートに戻して、リスト「${home}」へ入れますか？（「キャンセル」なら、タスクのまま「${n.list}」に残ります）`)) return "";
+  D.setKind(id, "note");
+  return "（ノートに戻して、リスト「" + home + "」へ入れました）" + enterList(id, home);
 }
 // 日付ピッカーで日付を選んだあと: リスト未設定なら、予定の印があれば「予定」、無ければ「締切」のリストへ入れる
 async function routeAfterPicker(id) {
@@ -1195,8 +1211,8 @@ function render() {
   if (state.view === "calendar" && state.calPanel === "undated") bits.push("日付なし");
   else if (state.view === "calendar" && state.day) bits.push(state.day.replace(/-0?/g, "/").replace("/", "年").replace("/", "月") + "日");
   crumb.textContent = state.view === "trash"
-    ? "ゴミ箱" + (state.trash ? `  (${state.trash.length})` : "")
-    : (bits.join(" › ") || "すべて") + `  (${state.notes.length})`;
+    ? "ゴミ箱" + (state.trash ? `  (${state.trash.length})` : "") + " ▾"
+    : (bits.join(" › ") || "すべて") + `  (${state.notes.length}) ▾`;
   if (state.view === "trash") { renderTrashList(); return; }
   const empty = state.view === "calendar" && !state.day;
   // 見出し: ピン留めは常に先頭の1グループ。そのあとは「グループ表示」の設定（なし / タグ）に従う
@@ -1970,16 +1986,17 @@ const addDaysYmd = (s, k) => { const d = new Date(s + "T00:00:00"); d.setDate(d.
 // 提案を、日付（または予定）にする。予定で時刻つきなら、10分前に通知する
 async function applySuggestion(s) {
   const id = state.cur;
-  await setDue(s.until ? s.until : s.t ? s.d + "T" + s.t : s.d);
+  const wasNote = D.get(id)?.kind === "note"; // ノートだったなら、「資料」からも動かす（予定か締切かは、このあと決まるので、setDue では振り分けない）
+  await setDue(s.until ? s.until : s.t ? s.d + "T" + s.t : s.d, true);
   if (s.until) D.setStart(id, s.d); // 複数日: 日付が終わりの日、開始日は s.d
   if (s.kind === "event") {
     D.setEvent(id, s.end || "1");
     if (s.t && !s.until) D.setRemind(id, "-PT10M");
-    setStatus(`予定にしました: ${fmtDue(s.d)}${s.until ? "〜" + fmtDue(s.until) : " " + (s.t ? s.t + (s.end ? "〜" + s.end : "") : "（終日）")}${routeList(id, "event")}`);
+    setStatus(`予定にしました: ${fmtDue(s.d)}${s.until ? "〜" + fmtDue(s.until) : " " + (s.t ? s.t + (s.end ? "〜" + s.end : "") : "（終日）")}${routeList(id, "event", wasNote)}`);
     await refresh();
     if (document.body.classList.contains("previewing")) togglePreview(true, false);
   } else {
-    const r = routeList(id, "deadline");
+    const r = routeList(id, "deadline", wasNote);
     if (r) { setStatus(`日付を付けました${r}`); await refresh(); }
   }
 }
@@ -2263,7 +2280,7 @@ const dueSpan = (n) => (n.due_time ? " " + n.due_time + (/^\d\d:\d\d$/.test(n.ev
 const dueText = (n) => (n.due_set ? (n.start ? fmtDue(n.start) + "〜" : "") + fmtDue(n.due_set) + dueSpan(n) + (n.event ? "（予定）" : "") : "");
 
 // v: "YYYY-MM-DD" / "YYYY-MM-DDTHH:MM" / ""
-async function setDue(v) {
+async function setDue(v, noRoute = false) {
   await flush();
   if (!state.cur) { // まだ保存していない新規メモ: 日付（と時刻）を覚えておいて、保存するときに付ける
     state.newDue = v.slice(0, 10);
@@ -2273,10 +2290,13 @@ async function setDue(v) {
     setStatus(v ? "日付を選びました（本文を書くと、保存されて、日付が付きます）" : "日付を消しました");
     return;
   }
+  const wasNote = D.get(state.cur)?.kind === "note";
   const n = D.setDue(state.cur, v);
   if (!n) return;
+  const routed = wasNote && !noRoute ? routeNoteTask(state.cur) : ""; // ノートが日付でタスクになったら、リストへ
+  const back = v ? "" : offerBackToNote(state.cur); // 日付を外したら、ノートに戻すか確認
   syncDueUI(n);
-  setStatus(v ? "日付を設定しました: " + dueText(n) : "日付を消しました");
+  setStatus(v ? "日付を設定しました: " + dueText(n) + routed : "日付を消しました" + back);
   if (document.body.classList.contains("previewing")) togglePreview(true, false);
   await refresh();
 }
@@ -2619,7 +2639,8 @@ async function actDue(id, v) {
   }
   const n = D.setDue(id, v);
   if (newStart) D.setStart(id, newStart);
-  setStatus(v && n ? `日付を設定しました: ${dueText(n)}` : "日付を消しました");
+  const routed = n0 && n0.kind === "note" ? routeNoteTask(id) : ""; // ノートが日付でタスクになったら、リストへ
+  setStatus(v && n ? `日付を設定しました: ${dueText(n)}${routed}` : "日付を消しました" + (v ? "" : offerBackToNote(id)));
   await refresh();
 }
 
@@ -2630,8 +2651,9 @@ async function actDueTime(id, t) {
   const day = n.due_set || todayStr();
   const v = t ? `${day}T${t}` : day;
   if (id === state.cur) return setDue(v);
+  const wasNote = n.kind === "note";
   const m = D.setDue(id, v);
-  setStatus(`日付を設定しました: ${m ? dueText(m) : v}`);
+  setStatus(`日付を設定しました: ${m ? dueText(m) : v}${wasNote ? routeNoteTask(id) : ""}`);
   await refresh();
 }
 
@@ -2653,6 +2675,12 @@ function setSortMode(m) {
   setStatus(m === "manual" ? "手動の並べ替え: 一覧のメモをドラッグして、好きな位置に置けます（メニューの「並べ替え」でも）" : "並び順を変えました");
   refresh();
 }
+// 一覧の上の見出し（「次の7日間 (3)」など）を押すと、画面（ビュー）を切り替えるメニュー。左のメニューと同じ項目
+$("crumb").onclick = () => {
+  const r = $("crumb").getBoundingClientRect();
+  const plain = !state.tag && !state.list && !state.inbox && !state.filter; // 絞り込み中は、どれも選ばれていない扱い
+  openMenu(VIEWS.map(([v, icon, label]) => ({ label, icon: plain && state.view === v ? "●" : icon, run: () => setView(v) })), r.left, r.bottom + 2);
+};
 $("btn-sort").onclick = () => {
   const r = $("btn-sort").getBoundingClientRect();
   openMenu(SORT_MODES.map(([k, label]) => ({ label, icon: state.sortMode === k ? "●" : "○", run: () => setSortMode(k) })), r.left, r.bottom + 2);
