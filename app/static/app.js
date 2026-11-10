@@ -1347,6 +1347,7 @@ function saveLocal() {
     state.cur = D.create(body, state.newDue || "", (state.list && orderedLists().some((l) => l.name === state.list) ? state.list : "") || (kind === "note" ? state.listRoutes.note || "" : ""), kind).id;
     state.newKind = "";
     if (state.newDue && state.newTime) D.setDue(state.cur, `${state.newDue}T${state.newTime}`); // 時刻つきの日付
+    if (state.newDue) routeList(state.cur, "deadline"); // 日付を指定して作ったメモ: リストを選んでいなければ、締切の入れ先へ（近ければ具体的な次…）
     state.newDue = "";
     state.newTime = "";
   } else {
