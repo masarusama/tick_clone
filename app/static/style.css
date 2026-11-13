@@ -356,3 +356,7 @@ body.hassel #list li.cur:not(.msel){box-shadow:none}
 #bd-items .bc-bar.bd-ev{position:absolute;pointer-events:auto;white-space:normal;overflow:hidden;line-height:16px;padding:1px 5px;box-sizing:border-box;z-index:2}
 #bd-now{position:absolute;left:56px;right:0;border-top:2px solid #d9534f;z-index:3;pointer-events:none}
 .bc-n{cursor:pointer}
+.bd-hr.dropover{background:none;outline:none}
+#bd-guide{position:absolute;left:56px;right:0;border-top:2px dashed var(--accent);z-index:4;pointer-events:none;font-size:11px;color:var(--accent)}
+#bd-guide[hidden]{display:none}
+body.dragging #bd-items .bc-bar{pointer-events:none}

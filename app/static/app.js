@@ -1068,7 +1068,7 @@ function buildDay(items, s, mkBar) {
   for (const it of allday) adl.append(mkBar(it, (it.s && it.e && it.s < it.e ? `${fmtDue(it.s)}〜${fmtDue(it.e)} ` : "") + (it.title || "（空のメモ）")));
   ad.append(adl);
   ad.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s); };
-  dropTarget(ad, (id) => actDue(id, s), "この日にする（時刻は、そのまま）");
+  dropTarget(ad, (id) => dropAllDay(id, s), "この日の終日にする（時刻は外れます）");
   const sc = document.createElement("div");
   sc.id = "bd-scroll";
   const g = document.createElement("div");
@@ -1081,9 +1081,26 @@ function buildDay(items, s, mkBar) {
     row.style.height = DAY_HOUR + "px";
     row.append(Object.assign(document.createElement("span"), { className: "bd-lab", textContent: `${h}:00` }));
     row.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s, `${pad2(h)}:00`); };
-    dropTarget(row, (id) => actDue(id, s), "この日にする（時刻は、そのまま）");
+    dropTarget(row, (id) => dropAtTime(id, s, minAt(g, lastY)), "この日の、この時刻にする");
     g.append(row);
   }
+  let lastY = 0; // ドラッグ中の位置（15分きざみに合わせて、案内の線と時刻を出す）
+  const guide = document.createElement("div");
+  guide.id = "bd-guide";
+  guide.hidden = true;
+  g.addEventListener("dragover", (e) => {
+    if (!state.dragId) return;
+    lastY = e.clientY;
+    const m = minAt(g, lastY);
+    guide.hidden = false;
+    guide.style.top = (m / 60) * DAY_HOUR + "px";
+    guide.textContent = `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+  });
+  const hideGuide = () => { guide.hidden = true; };
+  g.addEventListener("dragleave", (e) => { if (!g.contains(e.relatedTarget)) hideGuide(); });
+  g.addEventListener("drop", hideGuide);
+  document.addEventListener("dragend", hideGuide, { once: true });
+  g.append(guide);
   const lay = document.createElement("div");
   lay.id = "bd-items";
   for (const t of timed) {
@@ -1108,6 +1125,36 @@ function buildDay(items, s, mkBar) {
   const first = timed.length ? timed[0].a : null; // 最初に見える位置: 今日なら今の少し前、ほかの日は最初の予定の少し前（無ければ朝8時）
   requestAnimationFrame(() => { sc.scrollTop = (Math.max(0, (s === todayStr() ? nowMin : first ?? 480) - 60) / 60) * DAY_HOUR; });
   return wrap;
+}
+
+// 日表示のドラッグ: 位置（y）→ 15分きざみの分（0〜1425）
+function minAt(g, y) {
+  const m = ((y - g.getBoundingClientRect().top) / DAY_HOUR) * 60;
+  return Math.max(0, Math.min(1425, Math.round(m / 15) * 15));
+}
+// その日の min 分（0時からの分）に動かす。終わりの時刻つきの予定は、長さを保つ。複数日のメモは、日付だけ動かす
+async function dropAtTime(id, s, min) {
+  const n = D.get(id);
+  if (!n) return;
+  if (n.start) return actDue(id, s);
+  const toHm = (m) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+  let end = "";
+  if (n.due_time && /^\d\d:\d\d$/.test(n.event || "")) {
+    const [h1, m1] = n.due_time.split(":").map(Number), [h2, m2] = n.event.split(":").map(Number);
+    const len = h2 * 60 + m2 - (h1 * 60 + m1);
+    if (len > 0) end = toHm(Math.min(min + len, 1439));
+  }
+  await actDue(id, `${s}T${toHm(min)}`);
+  if (end) { D.setEvent(id, end); await refresh(); }
+}
+// 日表示の「終日」の欄へ: その日の終日にする（時刻と、終わりの時刻は外す）
+async function dropAllDay(id, s) {
+  await actDue(id, s);
+  const n = D.get(id);
+  if (n && n.due_time && !n.start) {
+    await actDueTime(id, "");
+    if (/^\d\d:\d\d$/.test((D.get(id) || {}).event || "")) { D.setEvent(id, "1"); await refresh(); }
+  }
 }
 
 // マスの高さに入らない帯は、「+N件」にまとめる（押すと、その日を、いつものカレンダーで開く）
