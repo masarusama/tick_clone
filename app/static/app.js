@@ -992,7 +992,11 @@ function renderBig() {
     if (it.ghost) b.title = "今後の回（繰り返し）: " + b.title;
     return b;
   };
-  if (state.bigMode === "day") { bigEl.replaceChildren(head, buildDay(items, ymd(start), mkBar)); return; }
+  if (state.bigMode !== "month") { // 日・週: 時間軸の表示
+    const days = Array.from({ length: state.bigMode === "week" ? 7 : 1 }, (_, k) => ymd(addD(start, k)));
+    bigEl.replaceChildren(head, buildTime(items, days, mkBar));
+    return;
+  }
   for (let i = 0; i < rows * 7; i++) {
     const d = addD(start, i), s = ymd(d);
     const hol = holidayName(s);
@@ -1036,22 +1040,12 @@ function renderBig() {
 }
 
 
-// ---- 日表示: 1日の時間軸（0〜24時）。時刻つきのメモは、時刻と長さの位置に。終日・複数日は、上の「終日」の欄に ----
+// ---- 時間軸の表示（日・週）: 0〜24時の軸に、時刻つきのメモを、時刻と長さの位置に。終日・複数日は、上の「終日」の欄に ----
 const DAY_HOUR = 48; // 1時間の高さ(px)
-function buildDay(items, s, mkBar) {
-  const wrap = document.createElement("div");
-  wrap.id = "bd";
-  const timed = [], allday = [];
-  for (const it of items[s] || []) {
-    const m = /^(\d\d):(\d\d)(?:-(\d\d):(\d\d))?$/.exec(it.time || "");
-    if (!m || (it.s && it.e && it.s < it.e)) { allday.push(it); continue; }
-    const a = +m[1] * 60 + +m[2];
-    let b = m[3] ? +m[3] * 60 + +m[4] : a + 60; // 終わりの時刻が無いものは、1時間の長さで表す
-    if (b <= a) b = a + 30;
-    timed.push({ it, a, b: Math.min(b, 1440), col: 0, n: 1 });
-  }
+// 時間が重なるものは、横に並べる（col = 何列目、n = その重なりの列の数）
+function layoutCols(timed) {
   timed.sort((x, y) => x.a - y.a || x.b - y.b);
-  let cluster = [], colEnds = [], clusterEnd = 0; // 時間が重なるものは、横に並べる
+  let cluster = [], colEnds = [], clusterEnd = 0;
   const closeCluster = () => { for (const t of cluster) t.n = colEnds.length; cluster = []; colEnds = []; clusterEnd = 0; };
   for (const t of timed) {
     if (cluster.length && t.a >= clusterEnd) closeCluster();
@@ -1060,76 +1054,153 @@ function buildDay(items, s, mkBar) {
     colEnds[c] = t.b; t.col = c; cluster.push(t); clusterEnd = Math.max(clusterEnd, t.b);
   }
   closeCluster();
+}
+// 帯の下の端をドラッグして、長さ（終わりの時刻）を変える。終わりの時刻がつくので、「予定」になる
+function addResize(b, t, el) {
+  const h = document.createElement("div");
+  h.className = "bd-rs";
+  h.title = "ドラッグで長さを変える";
+  h.addEventListener("click", (e) => e.stopPropagation());
+  h.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    b.draggable = false;
+    h.setPointerCapture(e.pointerId);
+    const y0 = e.clientY, e0 = t.b, label = b.firstChild;
+    let end = e0;
+    const toHm = (m) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+    const mv = (ev) => {
+      end = Math.max(t.a + 15, Math.min(1439, Math.round((e0 + ((ev.clientY - y0) / DAY_HOUR) * 60) / 15) * 15));
+      b.style.height = Math.max(((end - t.a) / 60) * DAY_HOUR - 2, 18) + "px";
+      if (label && label.nodeType === 3) label.nodeValue = `${toHm(t.a)}-${toHm(end)} ${t.it.title || "（空のメモ）"}`;
+    };
+    const up = async () => {
+      h.removeEventListener("pointermove", mv);
+      b.draggable = true;
+      if (end !== e0) { D.setEvent(t.it.id, toHm(end)); await refresh(); }
+      else renderBig();
+    };
+    h.addEventListener("pointermove", mv);
+    h.addEventListener("pointerup", up, { once: true });
+    h.addEventListener("pointercancel", up, { once: true });
+  });
+  b.append(h);
+}
+function buildTime(items, days, mkBar) {
+  const week = days.length > 1, today = todayStr();
+  const wrap = document.createElement("div");
+  wrap.id = "bd";
+  wrap.className = week ? "week" : "";
+  const gut = (text = "") => Object.assign(document.createElement("div"), { className: "bd-gut", textContent: text });
+  const toDay = (s) => { state.bigMode = "day"; state.bigDay = s; pref.set("bigMode", "day"); renderBig(); };
+  if (week) {
+    const hd = document.createElement("div");
+    hd.id = "bd-head";
+    hd.append(gut());
+    for (const s of days) {
+      const d = new Date(s + "T00:00:00"), hol = holidayName(s);
+      hd.append(Object.assign(document.createElement("div"), {
+        className: "bd-dh" + (s === today ? " today" : "") + (hol || d.getDay() === 0 ? " sun" : d.getDay() === 6 ? " sat" : ""),
+        textContent: `${WD_NAMES[(d.getDay() + 6) % 7]} ${d.getMonth() + 1}/${d.getDate()}` + (hol ? " " + hol : ""),
+        title: "この日を「日」表示で見る", onclick: () => toDay(s),
+      }));
+    }
+    wrap.append(hd);
+  }
   const ad = document.createElement("div");
   ad.id = "bd-all";
-  ad.append(Object.assign(document.createElement("span"), { className: "bd-lab", textContent: "終日" }));
-  const adl = document.createElement("div");
-  adl.className = "bd-allist";
-  for (const it of allday) adl.append(mkBar(it, (it.s && it.e && it.s < it.e ? `${fmtDue(it.s)}〜${fmtDue(it.e)} ` : "") + (it.title || "（空のメモ）")));
-  ad.append(adl);
-  ad.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s); };
-  dropTarget(ad, (id) => dropAllDay(id, s), "この日の終日にする（時刻は外れます）");
+  ad.append(gut("終日"));
   const sc = document.createElement("div");
   sc.id = "bd-scroll";
   const g = document.createElement("div");
   g.id = "bd-grid";
   g.style.height = 24 * DAY_HOUR + "px";
-  for (let h = 0; h < 24; h++) {
+  for (let h = 0; h < 24; h++) { // 時間の線と、時刻の文字
     const row = document.createElement("div");
     row.className = "bd-hr";
     row.style.top = h * DAY_HOUR + "px";
-    row.style.height = DAY_HOUR + "px";
     row.append(Object.assign(document.createElement("span"), { className: "bd-lab", textContent: `${h}:00` }));
-    row.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s, `${pad2(h)}:00`); };
-    dropTarget(row, (id) => dropAtTime(id, s, minAt(g, lastY)), "この日の、この時刻にする");
     g.append(row);
   }
-  let lastY = 0; // ドラッグ中の位置（15分きざみに合わせて、案内の線と時刻を出す）
-  const guide = document.createElement("div");
-  guide.id = "bd-guide";
-  guide.hidden = true;
-  g.addEventListener("dragover", (e) => {
-    if (!state.dragId) return;
-    lastY = e.clientY;
-    const m = minAt(g, lastY);
-    guide.hidden = false;
-    guide.style.top = (m / 60) * DAY_HOUR + "px";
-    guide.textContent = `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
-  });
-  const hideGuide = () => { guide.hidden = true; };
-  g.addEventListener("dragleave", (e) => { if (!g.contains(e.relatedTarget)) hideGuide(); });
-  g.addEventListener("drop", hideGuide);
-  document.addEventListener("dragend", hideGuide, { once: true });
-  g.append(guide);
-  const lay = document.createElement("div");
-  lay.id = "bd-items";
-  for (const t of timed) {
-    const b = mkBar(t.it, `${t.it.time} ${t.it.title || "（空のメモ）"}`);
-    b.classList.add("bd-ev");
-    b.style.top = (t.a / 60) * DAY_HOUR + "px";
-    b.style.height = Math.max(((t.b - t.a) / 60) * DAY_HOUR - 2, 18) + "px";
-    b.style.left = `calc(${(t.col / t.n) * 100}% + 1px)`;
-    b.style.width = `calc(${100 / t.n}% - 3px)`;
-    lay.append(b);
-  }
-  g.append(lay);
+  const cl = document.createElement("div");
+  cl.id = "bd-cols";
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
-  if (s === todayStr()) {
-    const nl = document.createElement("div");
-    nl.id = "bd-now";
-    nl.style.top = (nowMin / 60) * DAY_HOUR + "px";
-    g.append(nl);
+  let first = null; // 最初に見える位置の元（いちばん早い時刻のメモ）
+  for (const s of days) {
+    const timed = [], allday = [];
+    for (const it of items[s] || []) {
+      const m = /^(\d\d):(\d\d)(?:-(\d\d):(\d\d))?$/.exec(it.time || "");
+      if (!m || (it.s && it.e && it.s < it.e)) { allday.push(it); continue; }
+      const a = +m[1] * 60 + +m[2];
+      let b = m[3] ? +m[3] * 60 + +m[4] : a + 60; // 終わりの時刻が無いものは、1時間の長さで表す
+      if (b <= a) b = a + 30;
+      timed.push({ it, a, b: Math.min(b, 1440), col: 0, n: 1 });
+    }
+    layoutCols(timed);
+    if (timed.length && (first === null || timed[0].a < first)) first = timed[0].a;
+    // 終日の欄（この日の分）
+    const ac = document.createElement("div");
+    ac.className = "bd-allcol";
+    for (const it of allday) {
+      const span = it.s && it.e && it.s < it.e;
+      const text = span ? (week ? (it.s < s ? "◀ " : "") + (it.title || "（空のメモ）") + (it.e > s ? " ▶" : "") : `${fmtDue(it.s)}〜${fmtDue(it.e)} ${it.title || "（空のメモ）"}`) : it.title || "（空のメモ）";
+      ac.append(mkBar(it, text));
+    }
+    ac.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s); };
+    dropTarget(ac, (id) => dropAllDay(id, s), "この日の終日にする（時刻は外れます）");
+    ad.append(ac);
+    // 時間の欄（この日の分）
+    const col = document.createElement("div");
+    col.className = "bd-col" + (s === today ? " today" : "");
+    let lastY = 0; // ドラッグ中の位置（15分きざみに合わせて、案内の線と時刻を出す）
+    const guide = document.createElement("div");
+    guide.className = "bd-guide";
+    guide.hidden = true;
+    col.addEventListener("dragover", (e) => {
+      if (!state.dragId) return;
+      lastY = e.clientY;
+      const m = minAt(col, lastY);
+      guide.hidden = false;
+      guide.style.top = (m / 60) * DAY_HOUR + "px";
+      guide.textContent = `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+    });
+    const hideGuide = () => { guide.hidden = true; };
+    col.addEventListener("dragleave", (e) => { if (!col.contains(e.relatedTarget)) hideGuide(); });
+    col.addEventListener("drop", hideGuide);
+    document.addEventListener("dragend", hideGuide, { once: true });
+    dropTarget(col, (id) => dropAtTime(id, s, minAt(col, lastY)), "この日の、この時刻にする");
+    col.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) { const m = Math.floor(minAt(col, e.clientY) / 60) * 60; newBigNote(s, `${pad2(m / 60)}:00`); } };
+    for (const t of timed) {
+      const b = mkBar(t.it, `${t.it.time} ${t.it.title || "（空のメモ）"}`);
+      b.classList.add("bd-ev");
+      b.style.top = (t.a / 60) * DAY_HOUR + "px";
+      b.style.height = Math.max(((t.b - t.a) / 60) * DAY_HOUR - 2, 18) + "px";
+      b.style.left = `calc(${(t.col / t.n) * 100}% + 1px)`;
+      b.style.width = `calc(${100 / t.n}% - 3px)`;
+      if (!t.it.ghost) addResize(b, t, col);
+      col.append(b);
+    }
+    if (s === today) {
+      const nl = document.createElement("div");
+      nl.className = "bd-now";
+      nl.style.top = (nowMin / 60) * DAY_HOUR + "px";
+      col.append(nl);
+    }
+    col.append(guide);
+    cl.append(col);
   }
+  g.append(cl);
   sc.append(g);
   wrap.append(ad, sc);
-  const first = timed.length ? timed[0].a : null; // 最初に見える位置: 今日なら今の少し前、ほかの日は最初の予定の少し前（無ければ朝8時）
-  requestAnimationFrame(() => { sc.scrollTop = (Math.max(0, (s === todayStr() ? nowMin : first ?? 480) - 60) / 60) * DAY_HOUR; });
+  const focus = days.includes(today) ? nowMin : first ?? 480; // 最初に見える位置: 今日を含むなら今の少し前、ほかは最初の予定の少し前（無ければ朝8時）
+  requestAnimationFrame(() => { sc.scrollTop = (Math.max(0, focus - 60) / 60) * DAY_HOUR; });
   return wrap;
 }
 
 // 日表示のドラッグ: 位置（y）→ 15分きざみの分（0〜1425）
-function minAt(g, y) {
-  const m = ((y - g.getBoundingClientRect().top) / DAY_HOUR) * 60;
+function minAt(col, y) {
+  const m = ((y - col.getBoundingClientRect().top) / DAY_HOUR) * 60;
   return Math.max(0, Math.min(1425, Math.round(m / 15) * 15));
 }
 // その日の min 分（0時からの分）に動かす。終わりの時刻つきの予定は、長さを保つ。複数日のメモは、日付だけ動かす
