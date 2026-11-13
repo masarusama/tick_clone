@@ -895,7 +895,7 @@ function renderCal() {
 
 // ---- 大きな月カレンダー（窓いっぱい。メモは日付のマスに、帯で並ぶ） ----
 const bigEl = $("bigcal");
-state.bigMode = pref.get("bigMode", "month"); // month / week
+state.bigMode = pref.get("bigMode", "month"); // month / week / day
 state.bigDay = todayStr();                    // 週表示の基準日・月表示で見ている月の日
 const WD_NAMES = ["月", "火", "水", "木", "金", "土", "日"]; // 月曜始まり
 const mondayOf = (s) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; };
@@ -904,6 +904,7 @@ const addD = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 function bigRange() {
   const base = new Date(state.bigDay + "T00:00:00");
   if (state.bigMode === "week") return { start: mondayOf(state.bigDay), rows: 1, month: base.getMonth() };
+  if (state.bigMode === "day") return { start: base, rows: 1, month: base.getMonth() };
   const first = new Date(base.getFullYear(), base.getMonth(), 1);
   const st = mondayOf(ymd(first));
   const last = new Date(base.getFullYear(), base.getMonth() + 1, 0);
@@ -913,7 +914,7 @@ function bigRange() {
 
 function shiftBig(dir) {
   const d = new Date(state.bigDay + "T00:00:00");
-  state.bigDay = ymd(state.bigMode === "week" ? addD(d, 7 * dir) : new Date(d.getFullYear(), d.getMonth() + dir, 1));
+  state.bigDay = ymd(state.bigMode === "day" ? addD(d, dir) : state.bigMode === "week" ? addD(d, 7 * dir) : new Date(d.getFullYear(), d.getMonth() + dir, 1));
   renderBig();
 }
 
@@ -929,19 +930,19 @@ function renderBig() {
   if (!on) { document.body.classList.remove("bigopen"); return; }
   const { start, rows, month } = bigRange();
   const today = todayStr();
-  const lo = ymd(start), hi = ymd(addD(start, rows * 7));
+  const lo = ymd(start), hi = ymd(addD(start, state.bigMode === "day" ? 1 : rows * 7));
   const items = D.calendarFull(lo, hi, state.calSrc, calDone());
   const base = new Date(state.bigDay + "T00:00:00");
   const head = document.createElement("div");
   head.id = "bc-head";
   const navb = Object.assign(document.createElement("button"), { textContent: "☰", title: "メニュー", id: "bc-nav" });
   navb.onclick = (e) => { e.stopPropagation(); document.body.classList.add("navopen"); };
-  const ttl = Object.assign(document.createElement("b"), { textContent: `${base.getFullYear()}年${base.getMonth() + 1}月` + (state.bigMode === "week" ? "（週）" : "") });
+  const ttl = Object.assign(document.createElement("b"), { textContent: state.bigMode === "day" ? `${base.getFullYear()}年${base.getMonth() + 1}月${base.getDate()}日（${WD_NAMES[(base.getDay() + 6) % 7]}）${holidayName(state.bigDay) ? " " + holidayName(state.bigDay) : ""}` : `${base.getFullYear()}年${base.getMonth() + 1}月` + (state.bigMode === "week" ? "（週）" : "") });
   const mk = (text, title, fn) => Object.assign(document.createElement("button"), { textContent: text, title, onclick: fn });
   const sel = document.createElement("select");
   for (const [v, l] of SRC_LABELS) sel.append(Object.assign(document.createElement("option"), { value: v, textContent: l, selected: v === state.calSrc }));
   sel.onchange = () => { state.calSrc = sel.value; pref.set("calSrc", sel.value); renderBig(); };
-  const mode = mk(state.bigMode === "week" ? "週" : "月", "月 ⇄ 週", () => { state.bigMode = state.bigMode === "week" ? "month" : "week"; pref.set("bigMode", state.bigMode); renderBig(); });
+  const mode = mk(state.bigMode === "day" ? "日" : state.bigMode === "week" ? "週" : "月", "月 → 週 → 日", () => { state.bigMode = state.bigMode === "month" ? "week" : state.bigMode === "week" ? "day" : "month"; pref.set("bigMode", state.bigMode); renderBig(); });
   head.append(navb, ttl, mk("＋", "新しいメモ（日付は今日）", () => newBigNote(today)), mode, sel,
     mk("‹", "前へ ([)", () => shiftBig(-1)), mk("今日", "今日へ", () => { state.bigDay = today; renderBig(); }), mk("›", "次へ (])", () => shiftBig(1)));
   const wk = document.createElement("div");
@@ -991,6 +992,7 @@ function renderBig() {
     if (it.ghost) b.title = "今後の回（繰り返し）: " + b.title;
     return b;
   };
+  if (state.bigMode === "day") { bigEl.replaceChildren(head, buildDay(items, ymd(start), mkBar)); return; }
   for (let i = 0; i < rows * 7; i++) {
     const d = addD(start, i), s = ymd(d);
     const hol = holidayName(s);
@@ -999,7 +1001,7 @@ function renderBig() {
     c.dataset.d = s;
     const top = document.createElement("div");
     top.className = "bc-top";
-    top.append(Object.assign(document.createElement("span"), { className: "bc-n" + (s === today ? " today" : ""), textContent: d.getDate() === 1 ? `${d.getMonth() + 1}月1日` : d.getDate() }));
+    top.append(Object.assign(document.createElement("span"), { className: "bc-n" + (s === today ? " today" : ""), textContent: d.getDate() === 1 ? `${d.getMonth() + 1}月1日` : d.getDate(), title: "この日を「日」表示で見る", onclick: (e) => { e.stopPropagation(); state.bigMode = "day"; state.bigDay = s; pref.set("bigMode", "day"); renderBig(); } }));
     if (hol) top.append(Object.assign(document.createElement("span"), { className: "bc-hol", textContent: hol }));
     const list = document.createElement("div");
     list.className = "bc-list";
@@ -1033,6 +1035,81 @@ function renderBig() {
   requestAnimationFrame(fitBars);
 }
 
+
+// ---- 日表示: 1日の時間軸（0〜24時）。時刻つきのメモは、時刻と長さの位置に。終日・複数日は、上の「終日」の欄に ----
+const DAY_HOUR = 48; // 1時間の高さ(px)
+function buildDay(items, s, mkBar) {
+  const wrap = document.createElement("div");
+  wrap.id = "bd";
+  const timed = [], allday = [];
+  for (const it of items[s] || []) {
+    const m = /^(\d\d):(\d\d)(?:-(\d\d):(\d\d))?$/.exec(it.time || "");
+    if (!m || (it.s && it.e && it.s < it.e)) { allday.push(it); continue; }
+    const a = +m[1] * 60 + +m[2];
+    let b = m[3] ? +m[3] * 60 + +m[4] : a + 60; // 終わりの時刻が無いものは、1時間の長さで表す
+    if (b <= a) b = a + 30;
+    timed.push({ it, a, b: Math.min(b, 1440), col: 0, n: 1 });
+  }
+  timed.sort((x, y) => x.a - y.a || x.b - y.b);
+  let cluster = [], colEnds = [], clusterEnd = 0; // 時間が重なるものは、横に並べる
+  const closeCluster = () => { for (const t of cluster) t.n = colEnds.length; cluster = []; colEnds = []; clusterEnd = 0; };
+  for (const t of timed) {
+    if (cluster.length && t.a >= clusterEnd) closeCluster();
+    let c = colEnds.findIndex((e) => e <= t.a);
+    if (c < 0) c = colEnds.length;
+    colEnds[c] = t.b; t.col = c; cluster.push(t); clusterEnd = Math.max(clusterEnd, t.b);
+  }
+  closeCluster();
+  const ad = document.createElement("div");
+  ad.id = "bd-all";
+  ad.append(Object.assign(document.createElement("span"), { className: "bd-lab", textContent: "終日" }));
+  const adl = document.createElement("div");
+  adl.className = "bd-allist";
+  for (const it of allday) adl.append(mkBar(it, (it.s && it.e && it.s < it.e ? `${fmtDue(it.s)}〜${fmtDue(it.e)} ` : "") + (it.title || "（空のメモ）")));
+  ad.append(adl);
+  ad.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s); };
+  dropTarget(ad, (id) => actDue(id, s), "この日にする（時刻は、そのまま）");
+  const sc = document.createElement("div");
+  sc.id = "bd-scroll";
+  const g = document.createElement("div");
+  g.id = "bd-grid";
+  g.style.height = 24 * DAY_HOUR + "px";
+  for (let h = 0; h < 24; h++) {
+    const row = document.createElement("div");
+    row.className = "bd-hr";
+    row.style.top = h * DAY_HOUR + "px";
+    row.style.height = DAY_HOUR + "px";
+    row.append(Object.assign(document.createElement("span"), { className: "bd-lab", textContent: `${h}:00` }));
+    row.ondblclick = (e) => { if (!e.target.closest(".bc-bar")) newBigNote(s, `${pad2(h)}:00`); };
+    dropTarget(row, (id) => actDue(id, s), "この日にする（時刻は、そのまま）");
+    g.append(row);
+  }
+  const lay = document.createElement("div");
+  lay.id = "bd-items";
+  for (const t of timed) {
+    const b = mkBar(t.it, `${t.it.time} ${t.it.title || "（空のメモ）"}`);
+    b.classList.add("bd-ev");
+    b.style.top = (t.a / 60) * DAY_HOUR + "px";
+    b.style.height = Math.max(((t.b - t.a) / 60) * DAY_HOUR - 2, 18) + "px";
+    b.style.left = `calc(${(t.col / t.n) * 100}% + 1px)`;
+    b.style.width = `calc(${100 / t.n}% - 3px)`;
+    lay.append(b);
+  }
+  g.append(lay);
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  if (s === todayStr()) {
+    const nl = document.createElement("div");
+    nl.id = "bd-now";
+    nl.style.top = (nowMin / 60) * DAY_HOUR + "px";
+    g.append(nl);
+  }
+  sc.append(g);
+  wrap.append(ad, sc);
+  const first = timed.length ? timed[0].a : null; // 最初に見える位置: 今日なら今の少し前、ほかの日は最初の予定の少し前（無ければ朝8時）
+  requestAnimationFrame(() => { sc.scrollTop = (Math.max(0, (s === todayStr() ? nowMin : first ?? 480) - 60) / 60) * DAY_HOUR; });
+  return wrap;
+}
+
 // マスの高さに入らない帯は、「+N件」にまとめる（押すと、その日を、いつものカレンダーで開く）
 function fitBars() {
   for (const c of bigEl.querySelectorAll(".bc-d")) {
@@ -1064,9 +1141,10 @@ async function openFromBig(id) {
   await open(id, true);
   renderBig();
 }
-async function newBigNote(day) {
+async function newBigNote(day, time = "") {
   document.body.classList.add("bigopen");
   await newNote(undefined, day);
+  if (time) { state.newTime = time; timeEl.value = time; } // 日表示の時間の欄をダブルクリック: その時刻つきで
 }
 $("bc-close").onclick = async () => {
   await flush();
