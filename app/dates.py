@@ -25,6 +25,8 @@ TAG_RE = re.compile(r"(?:(?<=\s)|^)#[^\s#\[\]()]+", re.M)
 FULL = re.compile(r"(?<!\d)(20\d{2})\s*[/\-.年]\s*(\d{1,2})\s*[/\-.月]\s*(\d{1,2})\s*日?(?!\d)")
 MD_KANJI = re.compile(r"(?<![\d/.:\-])(\d{1,2})月(\d{1,2})日")
 MD_SLASH = re.compile(r"(?<![\d/.:\-])(\d{1,2})/(\d{1,2})(?![\d/:])")
+# 月の無い「15日」: 「毎月15日」「15日間」「15日付」「1日3回」「10月12日から14日まで」の「14日」などは読まない
+DAY_ONLY = re.compile(r"(?<![\d/.:\-月年毎~〜～–—])(?<!から)(?<!毎月)(\d{1,2})日(?![間付目分以後前ご毎\d])")
 WEEK = re.compile(r"(再来週|来週|今週)の?([月火水木金土日])曜?日?")
 WEEKDAY_ONLY = re.compile(r"(?<![月火水木金土日来今])([月火水木金土日])曜日")
 REL_RE = re.compile("|".join(sorted(REL, key=len, reverse=True)))
@@ -53,6 +55,21 @@ def _nearest(anchor, m, d):
     """年が無い月日は、基準日に最も近い年のものにする"""
     best = None
     for y in (anchor.year - 1, anchor.year, anchor.year + 1):
+        c = _valid(y, m, d)
+        if c and (best is None or abs((c - anchor).days) < abs((best - anchor).days)):
+            best = c
+    return best
+
+
+def _nearest_day(anchor, d):
+    """月の無い日（15日）は、基準日の前の月・同じ月・次の月のうち、基準日に最も近いものにする"""
+    best = None
+    for k in (-1, 0, 1):
+        y, m = anchor.year, anchor.month + k
+        if m < 1:
+            y, m = y - 1, 12
+        elif m > 12:
+            y, m = y + 1, 1
         c = _valid(y, m, d)
         if c and (best is None or abs((c - anchor).days) < abs((best - anchor).days)):
             best = c
@@ -90,6 +107,10 @@ def _date_tokens(text, anchor):
             mo, d = int(m[1]), int(m[2])
             if 1 <= mo <= 12 and 1 <= d <= 31:
                 add(_nearest(anchor, mo, d), m)
+    for m in DAY_ONLY.finditer(t2):
+        d = int(m[1])
+        if 1 <= d <= 31:
+            add(_nearest_day(anchor, d), m)
     monday = anchor - timedelta(days=anchor.weekday())
     t3 = text
     for m in WEEK.finditer(text):

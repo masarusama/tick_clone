@@ -29,7 +29,7 @@ LOCK = threading.RLock()
 TAG_RE = re.compile(r"(?:(?<=\s)|^)#([^\s#\[\]()]+)", re.M)
 TAG_TRAIL = "、。，．,.!?！？)）」』】]:;：；"
 FENCE_RE = re.compile(r"^(```|~~~).*?^\1", re.M | re.S)
-INDEX_VERSION = 18  # 18: 「## 振り返り」の節の日付・語は、日付・繰り返しの読み取りから除く / 17: 中止（abandoned・cancelled 列。完了日には数えない） / 16: 完了日（completed 列） / 15: 種類（kind 列。ノート/タスク） / 14: リスト（lst 列） / 13: 繰り返し（rrule・rsug 列） / 12: 本文の日付の範囲（複数日の予定・dates.u） / 11: 本文の日時に終了時刻・種類(予定/締切)・event列 / 10: 英数字に挟まれた数字・熟語(朝日など)は時刻にしない / 9: 本文の日時に時刻（dates.t） / 8: sort 列（手動の並べ替え） / 2: 本文中の !日付 を日付として索引 / 3: 同期用 seq・due_set 列 / 4: pinned 列 / 5: priority 列 / 6: due_time・ndue・remind 列 / 7: タイトルから [題名](URL) の記号を除く
+INDEX_VERSION = 19  # 19: 月の無い「15日」も本文の日付に（近い月） / 18: 「## 振り返り」の節の日付・語は、日付・繰り返しの読み取りから除く / 17: 中止（abandoned・cancelled 列。完了日には数えない） / 16: 完了日（completed 列） / 15: 種類（kind 列。ノート/タスク） / 14: リスト（lst 列） / 13: 繰り返し（rrule・rsug 列） / 12: 本文の日付の範囲（複数日の予定・dates.u） / 11: 本文の日時に終了時刻・種類(予定/締切)・event列 / 10: 英数字に挟まれた数字・熟語(朝日など)は時刻にしない / 9: 本文の日時に時刻（dates.t） / 8: sort 列（手動の並べ替え） / 2: 本文中の !日付 を日付として索引 / 3: 同期用 seq・due_set 列 / 4: pinned 列 / 5: priority 列 / 6: due_time・ndue・remind 列 / 7: タイトルから [題名](URL) の記号を除く
 BANG_DUE_RE =re.compile(r"(?:(?<=\s)|^)[!！]([^\s!！\[]+)", re.M)
 ID_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$")
 
