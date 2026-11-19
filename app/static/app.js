@@ -42,6 +42,7 @@ state.sortMode = pref.get("sortMode", "updated");
 state.tagColors = pref.get("tagColors", {});
 state.filters = pref.get("filters", []); // 保存した絞り込み。設定として全端末で共通
 state.listToNote = pref.get("listToNote", []); // このリストに入れたメモは、自動でノートにする（日付の無い未完了のタスクだけ）。設定として全端末で共通
+state.recapPrompt = pref.get("recapPrompt", true) !== false; // 完了・中止の直後に「振り返り」を促すか。設定として全端末で共通
 state.listPromote = pref.get("listPromote", {}); // 元のリスト → {to, days}: 締切が近づいたら、別のリストへ移す。設定として全端末で共通
 state.listRoutes = pref.get("listRoutes", {}); // "deadline" / "event" → 自動で入れるリスト名。設定として全端末で共通
 state.listKinds = pref.get("listKinds", {}); // リスト名 → 新規メモの既定の種類（note / task）。設定として全端末で共通
@@ -1307,7 +1308,7 @@ let settingsPending = !!pref.get("settingsPending", false);
 async function pushSettings() {
   if (!settingsPending || !navigator.onLine) return;
   try {
-    const r = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tagColors: state.tagColors, lists: state.listOrder, listKinds: state.listKinds, listRoutes: state.listRoutes, listPromote: state.listPromote, listToNote: state.listToNote, filters: state.filters }) });
+    const r = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tagColors: state.tagColors, lists: state.listOrder, listKinds: state.listKinds, listRoutes: state.listRoutes, listPromote: state.listPromote, listToNote: state.listToNote, filters: state.filters, recapPrompt: state.recapPrompt }) });
     if (r.ok) { settingsPending = false; pref.set("settingsPending", false); }
   } catch { /* つながったとき、次の同期でもう一度 */ }
 }
@@ -1317,7 +1318,9 @@ async function pullSettings() {
     const r = await fetch("/api/settings", { cache: "no-store" });
     if (!r.ok) return;
     const j = await r.json();
-    if (JSON.stringify(j.tagColors || {}) !== JSON.stringify(state.tagColors) || JSON.stringify(j.lists || []) !== JSON.stringify(state.listOrder) || JSON.stringify(j.listKinds || {}) !== JSON.stringify(state.listKinds) || JSON.stringify(j.listRoutes || {}) !== JSON.stringify(state.listRoutes) || JSON.stringify(j.filters || []) !== JSON.stringify(state.filters) || JSON.stringify(j.listPromote || {}) !== JSON.stringify(state.listPromote) || JSON.stringify(j.listToNote || []) !== JSON.stringify(state.listToNote)) {
+    if (JSON.stringify(j.tagColors || {}) !== JSON.stringify(state.tagColors) || JSON.stringify(j.lists || []) !== JSON.stringify(state.listOrder) || JSON.stringify(j.listKinds || {}) !== JSON.stringify(state.listKinds) || JSON.stringify(j.listRoutes || {}) !== JSON.stringify(state.listRoutes) || JSON.stringify(j.filters || []) !== JSON.stringify(state.filters) || JSON.stringify(j.listPromote || {}) !== JSON.stringify(state.listPromote) || JSON.stringify(j.listToNote || []) !== JSON.stringify(state.listToNote) || (j.recapPrompt !== false) !== state.recapPrompt) {
+      state.recapPrompt = j.recapPrompt !== false;
+      pref.set("recapPrompt", state.recapPrompt);
       state.tagColors = j.tagColors || {};
       state.listOrder = j.lists || [];
       state.listKinds = j.listKinds || {};
@@ -1351,6 +1354,13 @@ function saveListOrder(order, kinds = state.listKinds, routes = state.listRoutes
   pref.set("settingsPending", true);
   pushSettings();
   render();
+}
+function setRecapPrompt(on) {
+  state.recapPrompt = on;
+  pref.set("recapPrompt", on);
+  settingsPending = true;
+  pref.set("settingsPending", true);
+  pushSettings();
 }
 function setTagColor(tag, color) {
   if (color) state.tagColors[tag] = color; else delete state.tagColors[tag];
@@ -1749,6 +1759,12 @@ function drawHistory() {
       const li = document.createElement("li");
       li.className = i === histSel ? "sel" : "";
       li.textContent = fmt(h.date) + "  " + h.sha.slice(0, 7);
+      if (h.changes && h.changes.length) { // 何が変わったか（日付・完了・リスト・本文など）
+        const sm = document.createElement("div");
+        sm.className = "hchg";
+        sm.textContent = h.changes.join(" / ");
+        li.append(sm);
+      }
       li.onclick = () => { histSel = i; drawHistory(); };
       return li;
     })
@@ -1757,7 +1773,8 @@ function drawHistory() {
   api("GET", `/api/notes/${state.cur}/history/${hist[histSel].sha}`).then((v) => {
     if (seq !== drawHistory.seq) return;
     histBody = v.body;
-    histView.textContent = v.body;
+    const ch = (hist[histSel].changes || []).join("\n");
+    histView.textContent = (ch ? "【この回の変更】\n" + ch + "\n――――\n\n" : "") + v.body; // 戻すのは本文だけ（histBody）
   });
 }
 
@@ -2709,7 +2726,7 @@ document.body.append(recapBar);
 let recapTimer = null, recapId = null;
 function offerRecap(id, what) {
   const n = D.get(id);
-  if (state.batch || !pref.get("recapPrompt", true) || !n || n.kind === "note") return;
+  if (state.batch || !state.recapPrompt || !n || n.kind === "note") return;
   recapId = id;
   $("recapdate").hidden = what === "中止" || !!n.repeat; // 完了日を直せるのは、完了（実績）だけ。繰り返しは、完了日を持たない
   $("recapmsg").textContent = (what === "中止" ? "中止にしました。理由などを、" : "完了しました。") + "振り返りに残しますか？";
@@ -2720,7 +2737,7 @@ function offerRecap(id, what) {
 $("recapgo").onclick = () => { if (recapId) writeRecap(recapId); };
 $("recapclose").onclick = () => { recapBar.hidden = true; };
 $("recapdate").onclick = () => { if (!recapId) return; const r = $("recapdate").getBoundingClientRect(); pickDate(recapId, { x: r.left, y: r.top - 280 > 0 ? r.top - 280 : r.bottom }, (v) => actCompleted(recapId, v)); };
-$("recapoff").onclick = () => { pref.set("recapPrompt", false); recapBar.hidden = true; setStatus("完了後の「振り返り」の案内を、オフにしました（メモのメニューで、またオンにできます）"); };
+$("recapoff").onclick = () => { setRecapPrompt(false); recapBar.hidden = true; setStatus("完了後の「振り返り」の案内を、オフにしました（メモのメニューで、またオンにできます）"); };
 
 // 一段落して次へ: 完了にせず、振り返りへ「- 日付 ✓ 」の行を足して、日付を次の区切りへ進める（1つのタスクを、続いていく流れとして使う）
 async function actStep(id, due) {
@@ -3147,7 +3164,7 @@ function noteMenu(id) {
     { label: "履歴", icon: "🕘", key: "Alt+H", run: async () => { await open(id); openHistory(); } },
     { sep: true },
     // 作成・更新の日時（年つき。スマホでも、メニューから見られる）
-    { label: pref.get("recapPrompt", true) ? "完了後の「振り返り」の案内: オン（オフにする）" : "完了後の「振り返り」の案内: オフ（オンにする）", icon: "💬", run: () => { const on = !pref.get("recapPrompt", true); pref.set("recapPrompt", on); setStatus(on ? "完了・中止の直後に、振り返りを促します" : "完了後の「振り返り」の案内を、オフにしました"); } },
+    { label: state.recapPrompt ? "完了後の「振り返り」の案内: オン（オフにする）" : "完了後の「振り返り」の案内: オフ（オンにする）", icon: "💬", run: () => { const on = !state.recapPrompt; setRecapPrompt(on); setStatus(on ? "完了・中止の直後に、振り返りを促します" : "完了後の「振り返り」の案内を、オフにしました"); } },
     { label: `作成 ${fmt(n.created)}`, disabled: true },
     { label: `更新 ${fmt(n.updated)}`, disabled: true },
     ...(n.abandoned ? [{ label: `中止 ${fmt(n.cancelled || n.updated)}`, disabled: true }] : n.done && n.completed ? [{ label: `完了 ${fmt(n.completed)}`, disabled: true }] : []),

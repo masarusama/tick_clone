@@ -368,3 +368,5 @@ body.hassel #list li.cur:not(.msel){box-shadow:none}
 .bd-guide[hidden]{display:none}
 body.dragging .bd-col .bc-bar{pointer-events:none}
 .bc-n{cursor:pointer}
+#hist-list li{flex-wrap:wrap}
+#hist-list .hchg{flex-basis:100%;font-size:12px;color:var(--sub)}

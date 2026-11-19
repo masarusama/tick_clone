@@ -922,7 +922,66 @@ def commit_now():
             _git("commit", "-m", title + ("\n\n" + "\n".join(msgs) if len(msgs) > 1 else ""))
 
 
+# 履歴の「何が変わったか」の表示用。frontmatter のキー → 画面の言葉。ここに無いキー（id / created / updated / sort など）は、履歴の説明に出さない
+_HIST_SKIP = {"id", "created", "updated", "sort", "last_done", "last_cancelled", "seq", "base"}
+_HIST_LABEL = {
+    "due": "日付", "start": "開始日", "event": "予定の印", "repeat": "繰り返し", "reminder": "リマインダー",
+    "list": "リスト", "kind": "種類", "priority": "優先度", "pinned": "ピン留め", "completed": "完了日", "cancelled": "中止日",
+}
+_PRIO = {"1": "低", "3": "中", "5": "高"}
+_KIND = {"note": "ノート", "task": "タスク"}
+
+
+def _hist_val(k, v):
+    v = (v or "").strip()
+    if k in ("due", "start", "completed", "cancelled"):
+        if not v:
+            return "なし"
+        d, _, t = v.partition("T")
+        t = t[:5]
+        m = re.fullmatch(r"(\d{4})-(\d\d)-(\d\d)", d)
+        return (f"{m.group(1)}/{int(m.group(2))}/{int(m.group(3))}" if m else d) + (f" {t}" if t else "")
+    if k == "event":
+        return "予定" if v else "締切"
+    if k == "priority":
+        return _PRIO.get(v, "なし")
+    if k == "kind":
+        return _KIND.get(v, v or "なし")
+    if k == "pinned":
+        return "ピン留め" if v else "なし"
+    if k == "list":
+        return v or "受信箱"
+    return v or "なし"
+
+
+def describe_change(old, new):
+    """1つ前の版(old=全文。無ければ None)と、この版(new=全文)の違いを、短い言葉の一覧にする（履歴の見出し用）。"""
+    if new is None:
+        return ["ゴミ箱へ移動（または削除）"]
+    if old is None:
+        return ["作成"]
+    om, ob = parse_file(old)
+    nm, nb = parse_file(new)
+    out = []
+    if om.get("status") != nm.get("status"):
+        st = nm.get("status")
+        out.append("完了にした" if st == "done" else "中止にした" if st == "abandoned" else "完了・中止を戻した")
+    for k in list(nm.keys()) + [k for k in om if k not in nm]:
+        if k in _HIST_SKIP or k in ("status", "trashed"):
+            continue
+        a, b = om.get(k, ""), nm.get(k, "")
+        if a == b:
+            continue
+        out.append(f"{_HIST_LABEL.get(k, k)}: {_hist_val(k, a)} → {_hist_val(k, b)}")
+    if "trashed" in nm and "trashed" not in om:
+        out.append("ゴミ箱へ移動")
+    if ob != nb:
+        out.append("本文を変更")
+    return out
+
+
 def history(nid):
+    """このメモの記録（新しい順）。changes = その回に何が変わったか（日付・完了・リスト・本文など）"""
     with LOCK:
         commit_now()
         p = _path_of(nid)
@@ -930,10 +989,25 @@ def history(nid):
             return []
         rel = p.relative_to(DATA).as_posix()
         out = _git("log", "--format=%H|%aI", "--", rel).stdout
-        return [
+        rows = [
             {"sha": a, "date": b}
             for a, b in (l.split("|", 1) for l in out.splitlines() if "|" in l)
         ]
+        texts = []
+        for i, r in enumerate(rows):
+            if i >= 100:  # 古い版の説明は、100件まで（git を呼ぶ回数の上限）
+                break
+            g = _git("show", f"{r['sha']}:{rel}")
+            texts.append(g.stdout if g.returncode == 0 else None)
+        for i, r in enumerate(rows):
+            if i >= len(texts) or (i + 1 >= len(texts) and i + 1 < len(rows)):
+                r["changes"] = []  # 古すぎて、説明を付けていない
+            elif i + 1 >= len(rows):
+                r["changes"] = describe_change(None, texts[i])  # いちばん古い記録 = 作成
+            else:
+                older = texts[i + 1]
+                r["changes"] = describe_change(older, texts[i]) if older is not None else (["ゴミ箱から戻した"] if texts[i] is not None else [])
+        return rows
 
 
 def version(nid, sha):

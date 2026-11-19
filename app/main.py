@@ -207,6 +207,7 @@ class Settings(BaseModel):
     listToNote: list[str] = []  # このリストに入れたメモは、自動でノートにする（日付の無い未完了のタスクだけ）
     listPromote: dict[str, dict] = {}  # 元のリスト名 → {to: 移す先のリスト名, days: 締切が何日以内になったら移すか}（日付つきの未完了タスクだけ）
     listKinds: dict[str, str] = {}  # リスト名 → 新規メモの既定の種類（"note" / "task"。無ければ task）
+    recapPrompt: bool | None = None  # 完了・中止の直後に「振り返り」を促すか（全端末で共通。None＝送られてこなかった＝今の値を保つ）
 
 
 def _settings_path():
@@ -263,7 +264,7 @@ def get_settings():
             return json.loads(p.read_text(encoding="utf-8"))
         except ValueError:
             pass
-    return {"tagColors": {}, "lists": [], "listKinds": {}, "listRoutes": {}, "listPromote": {}, "listToNote": [], "filters": []}
+    return {"tagColors": {}, "lists": [], "listKinds": {}, "listRoutes": {}, "listPromote": {}, "listToNote": [], "filters": [], "recapPrompt": True}
 
 
 @app.put("/api/settings")
@@ -312,7 +313,13 @@ def put_settings(s: Settings):
             continue
         if n and n not in to_note:
             to_note.append(n)
-    out = {"tagColors": colors, "lists": lists, "listKinds": kinds, "listRoutes": routes, "listPromote": promote, "listToNote": to_note, "filters": _clean_filters(s.filters)}
+    recap = s.recapPrompt
+    if recap is None:  # 古い画面（この項目を知らない）からの保存では、いまの値を保つ
+        try:
+            recap = bool(json.loads(_settings_path().read_text(encoding="utf-8")).get("recapPrompt", True))
+        except (OSError, ValueError, AttributeError):
+            recap = True
+    out = {"tagColors": colors, "lists": lists, "listKinds": kinds, "listRoutes": routes, "listPromote": promote, "listToNote": to_note, "filters": _clean_filters(s.filters), "recapPrompt": recap}
     p = _settings_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
