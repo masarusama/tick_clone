@@ -572,6 +572,12 @@ def create_note(body="", nid=None, created=None):
 RECAP_RE = re.compile(r"^##[ \t]*振り返り[ \t]*$")
 
 
+def recap_mark(mark, occ, today):
+    """振り返りの行の印。「回の日付」（予定が実際にあった日）と、消し込んだ日（行の日付）が違うときだけ、「✓（予定日 2026-11-11）」のように、回の日付を添える。
+    app/static/data.js の recapMark と、同じ決まり。"""
+    return mark if occ == today else f"{mark}（予定日 {occ}）"
+
+
 def add_recap_line(body, ymd, text):
     """メモ末尾の「## 振り返り」の節の末尾に、「- 日付 text」の行を足す（節が無ければ、末尾に作る）。
     繰り返すタスクの完了（✓）・スキップ（中止）の記録に使う。同じ日付・同じ印の行が、すでにあれば、何もしない（端末が先に足していても、二重にならない）。
@@ -585,7 +591,7 @@ def add_recap_line(body, ymd, text):
     at = end
     while at > h + 1 and not lines[at - 1].strip():
         at -= 1
-    if any(ln.startswith(bullet) for ln in lines[h + 1:at]):
+    if any(ln.rstrip() == bullet or ln.startswith(bullet + " ") for ln in lines[h + 1:at]):  # 「✓」の行が、「✓（予定日 …）」の行と取り違えられないように、行の区切りまで見る
         return body
     lines.insert(at, bullet)
     return "\n".join(lines) + "\n"
@@ -724,7 +730,7 @@ def update_note(nid, body, due=None, base=None, status=None, pinned=None, priori
                 meta["due"] = nxt.isoformat() + meta["due"][10:]
                 meta["last_done" if status == "done" else "last_cancelled"] = now_iso()[:16]
                 # 繰り返すタスクは、完了しても、完了日（completed）が残らない。代わりに、本文の「## 振り返り」へ、回ごとの記録（✓ / 中止）を1行足す
-                body = add_recap_line(body, now_iso()[:10], "✓" if status == "done" else "中止")
+                body = add_recap_line(body, now_iso()[:10], recap_mark("✓" if status == "done" else "中止", old_due.isoformat(), now_iso()[:10]))
             elif meta.get("status") != status:
                 meta["status"] = status
                 if status == "done":

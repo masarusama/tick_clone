@@ -370,3 +370,5 @@ body.dragging .bd-col .bc-bar{pointer-events:none}
 .bc-n{cursor:pointer}
 #hist-list li{flex-wrap:wrap}
 #hist-list .hchg{flex-basis:100%;font-size:12px;color:var(--sub)}
+.bc-bar.past{outline:1px dotted var(--fg);outline-offset:-1px}
+.bc-bar.skipped{opacity:.35;text-decoration:line-through wavy}

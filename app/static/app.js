@@ -980,17 +980,18 @@ function renderBig() {
   }
   const mkBar = (it, text) => {
     const b = document.createElement("div");
-    b.className = "bc-bar" + (it.done ? " done" : "") + (it.id === state.cur ? " cur" : "") + (it.ghost ? " ghost" : "");
+    b.className = "bc-bar" + (it.done ? " done" : "") + (it.id === state.cur ? " cur" : "") + (it.ghost ? " ghost" : "") + (it.past ? " past" : "") + (it.skipped ? " skipped" : "");
     b.dataset.id = it.id;
     const col = barColor(it);
     if (col) b.style.background = col;
     b.textContent = text;
     b.title = text;
-    b.draggable = !it.ghost; // 今後の回（薄い帯）は、ドラッグしない（元のメモの日付が動いてしまうため）
-    if (!it.ghost) b.addEventListener("dragstart", (e) => startDrag(e, it, b));
+    b.draggable = !it.ghost && !it.past; // 今後の回（薄い帯）・これまでの回は、ドラッグしない（元のメモの日付が動いてしまうため）
+    if (!it.ghost && !it.past) b.addEventListener("dragstart", (e) => startDrag(e, it, b));
     b.onclick = (e) => { e.stopPropagation(); openFromBig(it.id); };
     b.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); openMenu(noteMenu(it.id), e.clientX, e.clientY); });
     if (it.ghost) b.title = "今後の回（繰り返し）: " + b.title;
+    if (it.past) b.title = (it.skipped ? "この回は中止（スキップ）: " : "この回は完了: ") + b.title;
     return b;
   };
   if (state.bigMode !== "month") { // 日・週: 時間軸の表示
@@ -1179,7 +1180,7 @@ function buildTime(items, days, mkBar) {
       b.style.height = Math.max(((t.b - t.a) / 60) * DAY_HOUR - 2, 18) + "px";
       b.style.left = `calc(${(t.col / t.n) * 100}% + 1px)`;
       b.style.width = `calc(${100 / t.n}% - 3px)`;
-      if (!t.it.ghost) addResize(b, t, col);
+      if (!t.it.ghost && !t.it.past) addResize(b, t, col);
       col.append(b);
     }
     if (s === today) {

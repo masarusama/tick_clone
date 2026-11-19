@@ -32,9 +32,22 @@ r = store.update_note(a, "週次ミーティング\n\n#仕事", status="done")
 check("次の回へ進む（完了にならない）", not r["done"] and r["due"] > "2026-10-01", r)
 check("完了の記録（✓）が、本文の「## 振り返り」に1行付く", f"## 振り返り\n- {today} ✓" in r["body"], r["body"])
 body1 = r["body"]
-# 端末が、先に同じ行を足して送ってきても、二重にならない
-r2 = store.update_note(a, body1, status="done")
-check("同じ日に、もう一度完了しても、同じ行が二重にならない", r2["body"].count(f"- {today} ✓") == 1, r2["body"])
+check("回の日付（予定日）が、消し込んだ日と違うときは、「予定日」が添えられる", f"- {today} ✓（予定日 2026-10-01）" in body1, body1)
+# 端末が、先に同じ行（予定日つき）を足して送ってきても、二重にならない
+c2 = store.create_note("端末が先に行を足す")["id"]
+store.update_note(c2, "端末が先に行を足す", due="2026-10-01", repeat="FREQ=WEEKLY;BYDAY=TH", kind="task")
+dev_body = store.add_recap_line("端末が先に行を足す", today, store.recap_mark("✓", "2026-10-01", today))
+r2 = store.update_note(c2, dev_body, status="done")
+check("端末が先に足した行と、サーバーの行が、二重にならない", r2["body"].count("✓（予定日 2026-10-01）") == 1, r2["body"])
+# 予定日が今日のときは、添えない
+c3 = store.create_note("今日の回")["id"]
+store.update_note(c3, "今日の回", due=today, repeat="FREQ=DAILY", kind="task")
+r3 = store.update_note(c3, "今日の回", status="done")
+check("回の日付が今日なら、「予定日」は添えない", f"- {today} ✓\n" in r3["body"] and "予定日" not in r3["body"], r3["body"])
+# 同じ日に、別々の回を消し込んでも、両方の行が残る（「✓」の行が、「✓（予定日…）」の行と取り違えられない）
+b4 = store.add_recap_line("x\n\n## 振り返り\n- " + today + " ✓（予定日 2026-10-01）\n", today, "✓")
+check("予定日つきの行があっても、予定日の無い「✓」の行は足される", b4.count(f"- {today} ✓") == 2, b4)
+check("同じ行は、二重にならない（予定日の有無によらず）", store.add_recap_line(b4, today, "✓") == b4 and store.add_recap_line(b4, today, "✓（予定日 2026-10-01）") == b4, b4)
 
 # ---- スキップ（中止） ----
 s = store.create_note("毎週の予定")["id"]

@@ -426,6 +426,13 @@ export function calendarFull(lo, hi, src, done) {
       let c = nextAfter(rule, n.due);
       for (let i = 0; i < 120 && c !== null && c < hi; i++, c = nextAfter(rule, c)) add(c, n, t, false, true);
     }
+    if (srcs.includes("due") && n.repeat) { // 繰り返しのメモの、これまでの回（「完了・中止も出す」の設定によらず、いつも出す。薄く出すだけ）（消し込んだ日ではなく、回の日付に出す。✓ = 完了 / 中止 = スキップ）
+      for (const o of recapOccurrences(n.body)) {
+        if (o.d < lo || o.d >= hi) continue;
+        if (!days.has(o.d)) days.set(o.d, new Map());
+        days.get(o.d).set(n.id + "#" + o.mark + o.d, { id: n.id, title: n.title, done: true, skipped: o.mark === "中止", past: true, tags: n.tags, time: "", s: "", e: "", ghost: false });
+      }
+    }
     if (srcs.includes("created")) add(n.created.slice(0, 10), n, "");
     if (srcs.includes("updated")) add(n.updated.slice(0, 10), n, "");
     if (srcs.includes("completed") && n.done && n.completed) add(n.completed.slice(0, 10), n, n.completed.slice(11, 16)); // 完了した時刻も出す
@@ -593,6 +600,21 @@ export function setPinned(id, pinned) {
 // ---- 振り返り（メモ末尾の「## 振り返り」の節）。サーバーの store.add_recap_line と同じ決まり ----
 // text が空: 手で書くための行「- 日付 」を足す（直前の行が、自動の「- 日付 ✓」「- 日付 中止」なら、その行の続きに書けるようにする）
 // text がある: 自動の記録の行「- 日付 text」を足す（同じ行が、すでにあれば、何もしない）
+// 振り返りの行の印。「回の日付」（予定が実際にあった日）と、消し込んだ日（行の日付）が違うときだけ、「✓（予定日 2026-11-11）」のように、回の日付を添える（サーバーの store.recap_mark と同じ）
+export const recapMark = (mark, occ, today) => (occ === today ? mark : `${mark}（予定日 ${occ}）`);
+// 本文の「## 振り返り」の、繰り返しの回の記録を読む: [{ d: 回の日付, mark: "✓" | "中止" }]。「予定日」が無い行は、行の日付が回の日付
+export function recapOccurrences(body) {
+  const out = [];
+  const lines = (body || "").split("\n");
+  const h = lines.findIndex((l) => /^##[ \t]*振り返り[ \t]*$/.test(l));
+  if (h < 0) return out;
+  for (let i = h + 1; i < lines.length; i++) {
+    if (/^#{1,6}[ \t]+\S/.test(lines[i])) break;
+    const m = /^- (\d{4}-\d\d-\d\d) (✓|中止)(?:（予定日 (\d{4}-\d\d-\d\d)）)?/.exec(lines[i]);
+    if (m) out.push({ d: m[3] || m[1], mark: m[2] });
+  }
+  return out;
+}
 export function addRecapLine(body, ymdStr, text = "") {
   const lines = body.replace(/\s+$/, "").split("\n");
   const bullet = `- ${ymdStr} ${text}`;
@@ -602,11 +624,11 @@ export function addRecapLine(body, ymdStr, text = "") {
   for (let i = h + 1; i < lines.length; i++) if (/^#{1,6}[ \t]+\S/.test(lines[i])) { end = i; break; }
   let at = end;
   while (at > h + 1 && lines[at - 1].trim() === "") at--;
-  if (text) { if (lines.slice(h + 1, at).some((l) => l.startsWith(bullet))) return body; }
+  if (text) { if (lines.slice(h + 1, at).some((l) => l.trimEnd() === bullet || l.startsWith(bullet + " "))) return body; }
   else {
     const last = lines[at - 1] || "";
-    const m = new RegExp(`^- ${ymdStr} (✓|中止)[ \\t]*$`).exec(last);
-    if (at - 1 > h && m) { lines[at - 1] = `- ${ymdStr} ${m[1]} `; return lines.join("\n") + "\n"; }
+    const m = new RegExp(`^- ${ymdStr} (✓|中止)(（予定日 \\d{4}-\\d\\d-\\d\\d）)?[ \\t]*$`).exec(last);
+    if (at - 1 > h && m) { lines[at - 1] = `- ${ymdStr} ${m[1]}${m[2] || ""} `; return lines.join("\n") + "\n"; }
   }
   lines.splice(at, 0, bullet);
   return lines.join("\n") + "\n";
@@ -662,11 +684,12 @@ export function setDone(id, done, cancel = false, when = "") {
   const rule = done && n.repeat && n.due_set ? parseRule(n.repeat) : null;
   const nxt = rule ? advanceRule(rule, n.due_set, new Date().toLocaleDateString("sv-SE")) : null;
   if (nxt) { // 繰り返すメモ: 完了にせず、日付を次の回へ（サーバーも同じ計算をする）
+    const occ = n.due_set, today = new Date().toLocaleDateString("sv-SE"); // occ = この回の予定日（回の日付）
     const span = n.start ? dayDiff(n.start, n.due_set) : 0;
     n.due_set = nxt;
     n.dates = n.dates.filter((x) => x[1] !== "due");
     for (let i = span; i >= 0; i--) n.dates.push([addDays(nxt, -i), "due"]);
-    n.body = addRecapLine(n.body, new Date().toLocaleDateString("sv-SE"), cancel ? "中止" : "✓"); // 回ごとの記録を、「## 振り返り」へ（サーバーも同じ。二重にはならない）
+    n.body = addRecapLine(n.body, today, recapMark(cancel ? "中止" : "✓", occ, today)); // 回ごとの記録を、「## 振り返り」へ（サーバーも同じ。二重にはならない）
     Object.assign(n, normalize(n), { updated: nowIso() });
     touchNote(id);
     queue(n, { status: cancel ? "abandoned" : "done" });
