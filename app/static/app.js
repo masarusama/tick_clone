@@ -2746,8 +2746,10 @@ async function actStep(id, due) {
   const n = D.get(id);
   if (!n || n.kind === "note" || n.done) return;
   const today = todayStr();
-  let body = D.addRecapLine(n.body, today, "✓");
-  if (body === n.body) body = D.addRecapLine(n.body, today, ""); // 今日の「✓」の行が、すでにある: 新しい行だけ足す
+  const occ = (n.due_set || "").slice(0, 10); // この回の予定日（回の日付）。今日と違うときは、「✓（予定日 …）」と添える
+  const mark = occ ? D.recapMark("✓", occ, today) : "✓";
+  let body = D.addRecapLine(n.body, today, mark);
+  if (body === n.body) body = D.addRecapLine(n.body, today, ""); // 今日の同じ行が、すでにある: 新しい行だけ足す
   D.save(id, body);
   D.setDue(id, n.due_time ? `${due}T${n.due_time}` : due);
   recapBar.hidden = true;

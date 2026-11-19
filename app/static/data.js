@@ -426,7 +426,7 @@ export function calendarFull(lo, hi, src, done) {
       let c = nextAfter(rule, n.due);
       for (let i = 0; i < 120 && c !== null && c < hi; i++, c = nextAfter(rule, c)) add(c, n, t, false, true);
     }
-    if (srcs.includes("due") && n.repeat) { // 繰り返しのメモの、これまでの回（「完了・中止も出す」の設定によらず、いつも出す。薄く出すだけ）（消し込んだ日ではなく、回の日付に出す。✓ = 完了 / 中止 = スキップ）
+    if (srcs.includes("due") && n.body.includes("振り返り")) { // 繰り返し・「一段落して次へ」の、これまでの回（本文の「## 振り返り」の ✓・中止 の行。「完了・中止も出す」の設定によらず、いつも出す。薄く出すだけ）（消し込んだ日ではなく、回の日付に出す。✓ = 完了 / 中止 = スキップ）
       for (const o of recapOccurrences(n.body)) {
         if (o.d < lo || o.d >= hi) continue;
         if (!days.has(o.d)) days.set(o.d, new Map());
