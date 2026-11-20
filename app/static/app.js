@@ -2076,7 +2076,7 @@ document.addEventListener("keydown", (e) => {
 // ---------- 整形表示（画像・リンク）と添付 ----------
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const OK_URL = /^(https?:\/\/|attachments\/)/;
-const IMG_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+const IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i; // svg も画像として <img> で出す（<img> 経由の SVG はスクリプトが動かない。直接開くと、サーバーがダウンロード扱いにする）
 
 function inline(s) {
   // s はエスケープ済み。`code` の中は加工しない
