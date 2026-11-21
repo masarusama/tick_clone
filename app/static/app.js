@@ -1996,6 +1996,7 @@ document.addEventListener("keydown", (e) => {
   if (e.altKey && k === "h") { openHistory(); e.preventDefault(); return; }
   if (e.altKey && k === "p") { togglePreview(); e.preventDefault(); return; }
   if (e.altKey && k === "d") { dueEl.focus(); e.preventDefault(); return; }
+  if (e.altKey && e.code === "KeyC" && !e.ctrlKey && !e.metaKey) { chkToggleHere(); e.preventDefault(); return; } // チェックの行（☐）
   if (e.key === "Escape" && document.body.classList.contains("previewing") && document.activeElement !== dueEl) {
     // 整形表示からの Esc は、一覧へ戻る
     previewEl.blur();
@@ -2386,9 +2387,9 @@ function enterKey() {
 }
 
 function wireBlock(ta) {
-  ta.addEventListener("input", () => { syncFromTa(); autosize(ta); updateSuggest(); });
+  ta.addEventListener("input", () => { syncFromTa(); autosize(ta); if (!autoMarker()) updateSuggest(); });
   ta.addEventListener("compositionstart", () => { composing = true; hideSuggest(); });
-  ta.addEventListener("compositionend", () => { composing = false; updateSuggest(); });
+  ta.addEventListener("compositionend", () => { composing = false; if (!autoMarker()) updateSuggest(); });
   ta.addEventListener("click", updateSuggest);
   ta.addEventListener("blur", () => setTimeout(() => { // 別の段落などをクリックしたときの、確定（クリックを邪魔しないよう、少し遅らせる）
     if (blk && blk.ta === ta && document.activeElement !== ta) commitActive();
@@ -2415,6 +2416,9 @@ function wireBlock(ta) {
       if (e.key === "Escape") { hideSuggest(); e.preventDefault(); e.stopPropagation(); return; }
     }
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); commitActive(); previewEl.focus(); return; }
+    if (e.code === "KeyC" && e.altKey && !e.ctrlKey && !e.metaKey) { // Alt+C = この行を、チェックの行にする・戻す
+      e.preventDefault(); e.stopPropagation(); chkToggleHere(); return;
+    }
     if (e.key === "Tab" && !mod) { // Tab = 字下げ（行の頭に空白2つ。箇条書きなら、入れ子）/ Shift+Tab = 戻す
       e.preventDefault(); e.stopPropagation();
       if (FENCE.test(ta.value)) { if (!e.shiftKey) { ta.setRangeText("  ", ta.selectionStart, ta.selectionEnd, "end"); syncFromTa(); autosize(ta); } return; } // コードブロックの中は、その場に空白
@@ -2477,6 +2481,67 @@ function tailEdit() {
   beginEdit(last, "start");
 }
 
+// ---------- チェックの行（☐）を、整形表示のまま作る・外す ----------
+const CHK_MARK = "- [ ] ";
+
+// 行の全文の、行頭の記号を ☐ にする・外す → [新しい全文, 新しいカーソル位置]（位置は行全体での数）
+function chkLine(whole, pos) {
+  const ind = whole.match(/^[ \t　]*/)[0];
+  const rest = whole.slice(ind.length);
+  const mc = rest.match(/^[-*]\s+\[[ xX]\]\s+/);
+  if (mc) return [ind + rest.slice(mc[0].length), Math.max(ind.length, pos - mc[0].length)]; // ☐ を外して、普通の文に戻す
+  const mb = rest.match(/^(?:[-*]\s+|\d+\.\s+)/); // 箇条書き・番号の行は、☐ に変える（記号は重ねない）
+  const cut = mb ? mb[0].length : 0;
+  return [ind + CHK_MARK + rest.slice(cut), Math.max(ind.length + CHK_MARK.length, pos - cut + CHK_MARK.length)];
+}
+
+// ☑ ボタン・Alt+C: いま書いている行を、チェックの行にする・戻す（どの行も書いていなければ、末尾に新しいチェックの行を足す）
+function chkToggleHere() {
+  if (!document.body.classList.contains("editing")) return; // メモを開いていないときは、何もしない
+  if (!document.body.classList.contains("previewing")) { // ソース編集のとき: カーソルのある行
+    const v = ed.value, p = ed.selectionStart;
+    const s = v.lastIndexOf("\n", p - 1) + 1;
+    const e2 = v.indexOf("\n", p) < 0 ? v.length : v.indexOf("\n", p);
+    const [line, np] = chkLine(v.slice(s, e2), p - s);
+    ed.value = v.slice(0, s) + line + v.slice(e2);
+    ed.focus();
+    ed.setSelectionRange(s + np, s + np);
+    onInput();
+    return;
+  }
+  if (blk) { // 書いている行がある
+    const whole = blk.prefix + blk.ta.value;
+    if (whole.includes("\n") || FENCE.test(whole)) return; // コードブロック・複数行のまとまりは、そのまま
+    const [line, np] = chkLine(whole, blk.prefix.length + blk.ta.selectionStart);
+    replaceLines(blk.l, blk.e, [line], 0, np);
+    return;
+  }
+  commitActive(); // どの行も書いていない → 末尾に、新しいチェックの行
+  if (ed.value.includes("\r")) ed.value = ed.value.replace(/\r\n?/g, "\n");
+  const lines = srcLines();
+  if ((lines[lines.length - 1] || "").trim() !== "") lines.push("");
+  lines[lines.length - 1] = CHK_MARK;
+  ed.value = lines.join("\n");
+  onInput();
+  renderPreview();
+  beginEdit(blockAtLine(lines.length - 1), "end");
+}
+
+// 行頭に打った記号を、打ったとたんに本物の部品にする（`[] ` `[ ] ` → ☐ / `- ` → ・ / `1. ` → 番号）
+// 日本語入力では [ ] が 「 」 になることがあるので、それも受ける。行が記号だけのときに限る（文の途中では働かない）
+function autoMarker() {
+  if (!blk || blk.prefix || composing) return false;
+  const v = blk.ta.value;
+  if (v.includes("\n")) return false;
+  let line = null, m;
+  if ((m = v.match(/^([ \t　]*)(?:[-*][ \t　]+)?[[［「]([ 　xX]?)[\]］」][ 　]$/))) line = m[1] + "- [" + (/[xX]/.test(m[2]) ? "x" : " ") + "] ";
+  else if ((m = v.match(/^([ \t　]*)[-*][ 　]$/))) line = m[1] + "- ";
+  else if ((m = v.match(/^([ \t　]*)(\d+)\.[ 　]$/))) line = m[1] + m[2] + ". ";
+  if (!line) return false;
+  replaceLines(blk.l, blk.e, [line], 0, line.length);
+  return true;
+}
+
 // ---------- 日付 ----------
 const dueEl = $("due");
 
@@ -2534,6 +2599,8 @@ $("btn-more").onclick = async () => { // 開いているメモのメニュー（
   const r = $("btn-more").getBoundingClientRect();
   openMenu(noteMenu(state.cur), r.right - 190, r.bottom + 4);
 };
+$("btn-chk").onmousedown = (e) => e.preventDefault(); // 書いている行から、フォーカスを外さない
+$("btn-chk").onclick = () => chkToggleHere(); // バーの ☑ → チェックの行を作る・戻す
 $("btn-remind").onclick = async () => { // バーの ⏰ → リマインダーのメニュー（ボタンの下に出す）
   if (!state.cur) return;
   await flush();
