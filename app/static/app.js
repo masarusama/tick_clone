@@ -785,6 +785,13 @@ function renderNav() {
     if (dropAct) { dropTarget(b, dropAct[0], dropAct[1]); b.title = "メモをここに落とすと、" + dropAct[1]; }
     nodes.push(b);
   }
+  const rb = document.createElement("button");
+  rb.className = "nv";
+  rb.innerHTML = '<span class="ic">🧹</span><span class="lb">棚卸し</span><span class="c"></span>';
+  rb.children[2].textContent = rvAgo();
+  rb.title = "古くなったメモを、1件ずつ出して、正しい場所へ動かします（前回: " + (rvAgo() || "まだありません") + "）";
+  rb.onclick = openReview;
+  nodes.push(rb);
   nodes.push(...listRows());
   nodes.push(...filterRows());
   const h = document.createElement("div");
@@ -1820,6 +1827,7 @@ const commands = () => [
   { label: "タグの絞り込みを解除", key: "", run: () => setView(state.view) },
   ...SORT_MODES.map(([k, label]) => ({ label: "並び順: " + label, key: "", run: () => setSortMode(k) })),
   ...VIEWS.map(([v, , l]) => ({ label: "表示: " + l, key: { all: "a", today: "t", calendar: "c" }[v] || "", run: () => setView(v) })),
+  { label: "棚卸しを始める（古いメモを、1件ずつ仕分ける）", key: "", run: () => openReview() },
   { label: "使い方（ヘルプ・ショートカット）", key: "?", run: () => openHelp() },
 ];
 
@@ -1935,6 +1943,7 @@ $("btn-history").onclick = openHistory;
 // ---------- スマホの「戻る」ボタン（Android）: アプリの外へ出ず、いまの画面を1つ閉じる ----------
 // 一番上の層（拡大画像 → メニュー → 各ダイアログ → 選択モード → ☰メニュー → 開いているメモ → 絞り込み）を1つだけ閉じる。閉じたものがあれば true
 function backStep() {
+  if (rv.open) { closeReview(); return true; } // 棚卸し
   if ($("fedit")) { $("fedit").remove(); return true; } // フィルターの編集画面
   if (!lightbox.hidden) { lightbox.hidden = true; return true; }
   if (menu) { closeMenu(); return true; }
@@ -1969,6 +1978,7 @@ if (matchMedia("(pointer: coarse)").matches) {
 document.addEventListener("keydown", (e) => {
   if (e.isComposing || e.keyCode === 229) return;
   if (!lightbox.hidden) { lightbox.hidden = true; e.preventDefault(); return; }
+  if (rv.open) { reviewKey(e); return; } // 棚卸しの画面
   if (!$("notify").hidden) { if (e.key === "Escape") $("notify").hidden = true; return; }
   if (!trashEl.hidden) { if (e.key === "Escape") closeTrashDetail(); return; }
   if (menu) { menuKey(e); return; }
@@ -3544,6 +3554,327 @@ async function bulkDone(ids) {
   if (!tasks.length) { setStatus("ノートは完了にできません（タスクにすると完了できます）"); return; }
   const to = tasks.some((n) => !n.done); // ひとつでも未完了があれば、全部を完了に。全部完了済みなら、戻す
   await runBatch(tasks.map((n) => n.id), (id) => actDone(id, to), (to ? "完了にしました" : "完了を戻しました") + (skipped ? `（ノート${skipped}件は除く）` : ""));
+}
+
+// ---------- 棚卸し（週1回くらい、古くなったメモを1件ずつ出して、1キーで正しい場所へ動かす） ----------
+// 新しい保存場所は作らない。メモの「リスト」「完了」「中止」を動かすだけ（元に戻す・Ctrl+Z も、まとめて操作と同じ仕組み）。
+// どのリストを見るかは、リストの並び順（左のリスト欄）のまま。リスト名には依存しない。1〜9 = 並びの1〜9番目、0 = 受信箱
+const RV_KEPT_DAYS = 30; // 「このまま置く」にしたメモを、棚卸しに出さない日数（端末ごとの記憶）
+const rv = { open: false, phase: "pick", picks: [], max: 10, queue: [], i: 0, seen: new Set(), hist: [], stat: null, before: {}, held: false, msg: "", dests: [] };
+const rvEl = Object.assign(document.createElement("div"), { id: "review", hidden: true });
+document.body.append(rvEl);
+
+const rvDays = (iso) => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
+const rvLabel = (name) => (name === "" ? "📥 受信箱" : "📋 " + name.replace("/", " › "));
+function rvLists() { return ["", ...orderedLists().map((l) => l.name)]; }
+function rvOpenAll(name) { return D.all().filter((n) => (n.list || "") === name && !n.done && !n.abandoned); }
+// 棚卸しの候補: そのリストの未完了のメモ。古い順（更新日が古いものから）。「このまま置く」にした直後のものと、今回すでに見たものは除く
+function rvCands(name) {
+  const kept = pref.get("reviewKept", {});
+  return rvOpenAll(name)
+    .filter((n) => !rv.seen.has(n.id) && !(kept[n.id] && rvDays(kept[n.id]) < RV_KEPT_DAYS))
+    .sort((a, b) => Date.parse(a.updated) - Date.parse(b.updated));
+}
+// 左メニューの「前回 ◯日前」
+function rvAgo() {
+  const last = pref.get("reviewLast", "");
+  if (!last) return "";
+  const d = ymdDiff(last, todayStr());
+  return d <= 0 ? "今日" : d + "日前";
+}
+
+function openReview() {
+  document.body.classList.remove("navopen");
+  rv.open = true;
+  rv.phase = "pick";
+  rv.seen = new Set();
+  rv.hist = [];
+  rv.msg = "";
+  rv.max = pref.get("reviewMax", 10);
+  const saved = pref.get("reviewPicks", null);
+  const names = rvLists();
+  rv.picks = saved ? names.filter((x) => saved.includes(x)) : names.filter((x) => !state.listToNote.includes(x) && rvCands(x).length);
+  if (!rv.held) { state.batch++; rv.held = true; } // 動かしている間は、裏の一覧を作り直さない（閉じるときに1回だけ）
+  rvEl.hidden = false;
+  document.body.classList.add("reviewing");
+  rvRender();
+}
+async function closeReview() {
+  if (!rv.open) return;
+  rv.open = false;
+  rvEl.hidden = true;
+  document.body.classList.remove("reviewing");
+  undobar.hidden = true;
+  if (rv.stat && rv.stat.moved + rv.stat.done + rv.stat.cancel + rv.stat.kept > 0) pref.set("reviewLast", todayStr());
+  if (rv.held) { state.batch--; rv.held = false; }
+  await refresh();
+}
+
+const rvh = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+// ① 見るリストを選ぶ
+function rvRenderPick() {
+  const box = rvh("div", "rv-box");
+  box.append(rvh("div", "rv-title", "🧹 棚卸し"));
+  const ago = rvAgo();
+  box.append(rvh("div", "rv-sub", (ago ? `前回: ${ago}。` : "") + "古いメモを、1件ずつ出します。正しい場所へ、キーひとつで動かします。5分で切り上げてかまいません。"));
+  const rows = rvh("div", "rv-picks");
+  for (const name of rvLists()) {
+    const total = rvOpenAll(name).length, n = rvCands(name).length;
+    if (!total && name === "") continue;
+    const lb = rvh("label", "rv-pick" + (n ? "" : " off"));
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = rv.picks.includes(name);
+    cb.disabled = !n;
+    cb.onchange = () => { rv.picks = cb.checked ? [...rv.picks, name] : rv.picks.filter((x) => x !== name); rvSavePicks(); rvRenderStart(); };
+    lb.append(cb, rvh("span", "rv-pn", rvLabel(name)), rvh("span", "rv-pc", n ? `見るもの ${n}件（未完了 ${total}件）` : `未完了 ${total}件`));
+    rows.append(lb);
+  }
+  box.append(rows);
+  const bar = rvh("div", "rv-bar");
+  bar.append(rvh("span", null, "各リスト、古い順に"));
+  const sel = document.createElement("select");
+  for (const m of [5, 10, 20, 50, 9999]) sel.append(new Option(m === 9999 ? "全部" : m + "件まで", m, false, m === rv.max));
+  sel.onchange = () => { rv.max = +sel.value; pref.set("reviewMax", rv.max); rvRenderStart(); };
+  bar.append(sel);
+  box.append(bar);
+  const go = rvh("button", "rv-go primary", "");
+  go.id = "rv-go";
+  go.onclick = rvStart;
+  const close = rvh("button", "rv-x", "閉じる");
+  close.onclick = closeReview;
+  const act = rvh("div", "rv-acts");
+  act.append(go, close);
+  box.append(act);
+  rvEl.replaceChildren(box);
+  rvRenderStart();
+}
+function rvSavePicks() { pref.set("reviewPicks", rv.picks); }
+function rvPlan() { return rv.picks.flatMap((name) => rvCands(name).slice(0, rv.max).map((n) => ({ id: n.id, stage: name }))); }
+function rvRenderStart() {
+  const go = $("rv-go");
+  if (!go) return;
+  const n = rvPlan().length;
+  go.textContent = n ? `始める（${n}件）` : "見るものが、ありません";
+  go.disabled = !n;
+}
+function rvStart() {
+  const queue = rvPlan();
+  if (!queue.length) return;
+  rv.queue = queue;
+  rv.i = 0;
+  rv.hist = [];
+  rv.msg = "";
+  rv.stat = { moved: 0, done: 0, cancel: 0, kept: 0, skip: 0 };
+  rv.before = Object.fromEntries(rv.picks.map((name) => [name, rvOpenAll(name).length]));
+  rv.phase = "run";
+  rvRender();
+}
+
+// ② 1件ずつ
+function rvDestNames() { return orderedLists().map((l) => l.name); }
+function rvCurrent() {
+  while (rv.i < rv.queue.length && !D.get(rv.queue[rv.i].id)) rv.i++; // 途中で消えた（他の端末でゴミ箱へ、など）メモは飛ばす
+  return rv.i < rv.queue.length ? rv.queue[rv.i] : null;
+}
+function rvRenderRun() {
+  const q = rvCurrent();
+  if (!q) { rv.phase = "done"; rvRender(); return; }
+  const n = D.get(q.id);
+  undobar.hidden = true;
+  const box = rvh("div", "rv-box run");
+  const stageItems = rv.queue.filter((x) => x.stage === q.stage);
+  const stageNo = stageItems.findIndex((x) => x.id === q.id) + 1;
+  const head = rvh("div", "rv-head");
+  head.append(rvh("span", "rv-stage", rvLabel(q.stage)), rvh("span", "rv-count", `${stageNo} / ${stageItems.length}`));
+  const x = rvh("button", "rv-x", "終わる（Esc）");
+  x.onclick = closeReview;
+  head.append(x);
+  box.append(head);
+  const prog = rvh("div", "rv-prog");
+  const fill = rvh("div", "rv-fill");
+  fill.style.width = Math.round((rv.i / rv.queue.length) * 100) + "%";
+  prog.append(fill);
+  box.append(prog);
+
+  const card = rvh("div", "rv-card");
+  card.append(rvh("div", "rv-ttl", n.title || "（空のメモ）"));
+  const meta = [];
+  if (n.kind === "note") meta.push("📝 ノート");
+  meta.push(`作成 ${fmtDate(n.created)}`, `更新 ${fmtDate(n.updated)}（${rvDays(n.updated)}日前）`);
+  if (n.due_set) meta.push("📅 " + dueText(n));
+  if (n.repeat) meta.push("🔁 " + D.ruleLabel(n.repeat));
+  if (n.tags && n.tags.length) meta.push(n.tags.map((t) => "#" + t).join(" "));
+  card.append(rvh("div", "rv-meta", meta.join("　")));
+  const rest = (n.body || "").split("\n").slice(1).join("\n").trim();
+  if (rest) card.append(rvh("div", "rv-body", rest.length > 700 ? rest.slice(0, 700) + "…" : rest));
+  box.append(card);
+
+  // 動かし先: リストの並び順どおり。1〜9 はキー、0 は受信箱
+  const names = rvDestNames();
+  rv.dests = names.slice(0, 9);
+  const chips = rvh("div", "rv-chips");
+  const chip = (key, name) => {
+    const here = (n.list || "") === name;
+    const b = rvh("button", "rv-chip" + (here ? " here" : ""));
+    b.append(rvh("kbd", null, key || "·"), rvh("span", null, name === "" ? "受信箱" : name.replace("/", " › ")));
+    b.title = here ? "いま、ここにあります（押すと、このまま置きます）" : "このリストへ入れる";
+    b.onclick = () => rvMove(name);
+    return b;
+  };
+  names.forEach((name, i) => chips.append(chip(i < 9 ? String(i + 1) : "", name)));
+  chips.append(chip("0", ""));
+  box.append(chips);
+
+  const acts = rvh("div", "rv-acts2");
+  const btn = (key, label, tip, fn, cls) => { const b = rvh("button", "rv-act " + (cls || "")); b.append(rvh("kbd", null, key), rvh("span", null, label)); b.title = tip; b.onclick = fn; return b; };
+  const isNote = n.kind === "note";
+  acts.append(
+    btn("d", n.repeat ? "この回を完了" : "完了", isNote ? "ノートは完了にできません" : "完了にする", rvDone, isNote ? "off" : ""),
+    btn("x", n.repeat ? "この回をやめる" : "やらない（中止）", isNote ? "ノートは中止にできません" : "中止にする（実績には数えません）", rvCancel, isNote ? "off" : ""),
+    btn("k", "このまま置く", `${RV_KEPT_DAYS}日間、棚卸しに出しません`, rvKeep),
+    btn("s", "あとで（飛ばす）", "今回は、何もしないで次へ", rvSkip),
+    btn("u", "1つ戻る", "いまの前の操作を、元に戻す", rvBack, rv.hist.length ? "" : "off"),
+  );
+  box.append(acts);
+  box.append(rvh("div", "rv-msg", rv.msg || "　"));
+  rvEl.replaceChildren(box);
+}
+
+// 1件への操作を行い、元に戻せるように控えて、次へ
+async function rvApply(kind, label, fn) {
+  const q = rvCurrent();
+  if (!q) return;
+  const id = q.id;
+  if (id === state.cur) await flush();
+  const snap = snapshot(id);
+  const extra = fn(id) || "";
+  undoStack.push({ label, snaps: [snap], n: 1 });
+  if (undoStack.length > 20) undoStack.shift();
+  rv.hist.push({ i: rv.i, kind, undo: true, id });
+  rv.stat[kind]++;
+  rv.seen.add(id);
+  rv.msg = label + extra;
+  rv.i++;
+  rvRender();
+}
+function rvMove(name) {
+  const q = rvCurrent();
+  const n = q && D.get(q.id);
+  if (!n) return;
+  if ((n.list || "") === name) return rvKeep(); // いまのリストを選んだ = このまま置く
+  return rvApply("moved", `→ ${name === "" ? "受信箱" : name.replace("/", " › ")} へ入れました`, (id) => enterList(id, name));
+}
+function rvDone() {
+  const n = rvCurrent() && D.get(rvCurrent().id);
+  if (!n) return;
+  if (n.kind === "note") { rv.msg = "ノートは完了にできません。リストへ動かすか、「このまま置く」を選んでください"; rvRender(); return; }
+  return rvApply("done", n.repeat ? "この回を完了にしました（次の回へ進みました）" : "完了にしました", (id) => { D.setDone(id, true); });
+}
+function rvCancel() {
+  const n = rvCurrent() && D.get(rvCurrent().id);
+  if (!n) return;
+  if (n.kind === "note") { rv.msg = "ノートは中止にできません。リストへ動かすか、「このまま置く」を選んでください"; rvRender(); return; }
+  return rvApply("cancel", n.repeat ? "この回を中止にしました（スキップ）" : "中止にしました（実績には数えません）", (id) => { D.setDone(id, true, true); });
+}
+function rvKeep() {
+  const q = rvCurrent();
+  if (!q) return;
+  const kept = pref.get("reviewKept", {});
+  const today = new Date().toISOString();
+  rv.hist.push({ i: rv.i, kind: "kept", id: q.id, prev: kept[q.id] || null });
+  kept[q.id] = today;
+  for (const [k, v] of Object.entries(kept)) if (rvDays(v) > RV_KEPT_DAYS || !D.get(k)) delete kept[k]; // 古い記憶は捨てる
+  pref.set("reviewKept", kept);
+  rv.stat.kept++;
+  rv.seen.add(q.id);
+  rv.msg = `このまま置きました（${RV_KEPT_DAYS}日間は出しません）`;
+  rv.i++;
+  rvRender();
+}
+function rvSkip() {
+  const q = rvCurrent();
+  if (!q) return;
+  rv.hist.push({ i: rv.i, kind: "skip", id: q.id });
+  rv.stat.skip++;
+  rv.msg = "飛ばしました（次の棚卸しで、また出ます）";
+  rv.i++;
+  rvRender();
+}
+async function rvBack() {
+  const h = rv.hist.pop();
+  if (!h) return;
+  if (h.undo) await undoLast();
+  else if (h.kind === "kept") {
+    const kept = pref.get("reviewKept", {});
+    if (h.prev) kept[h.id] = h.prev; else delete kept[h.id];
+    pref.set("reviewKept", kept);
+  }
+  if (h.kind === "skip" || h.kind === "kept" || h.undo) rv.stat[h.kind]--;
+  rv.seen.delete(h.id);
+  rv.i = h.i;
+  rv.phase = "run";
+  rv.msg = "1つ戻しました";
+  rvRender();
+}
+
+// ③ おしまい
+function rvRenderDone() {
+  undobar.hidden = true;
+  const s = rv.stat;
+  const box = rvh("div", "rv-box");
+  box.append(rvh("div", "rv-title", "🎉 おつかれさまでした"));
+  const bits = [];
+  if (s.moved) bits.push(`動かした ${s.moved}`);
+  if (s.done) bits.push(`完了 ${s.done}`);
+  if (s.cancel) bits.push(`中止 ${s.cancel}`);
+  if (s.kept) bits.push(`このまま ${s.kept}`);
+  if (s.skip) bits.push(`飛ばした ${s.skip}`);
+  box.append(rvh("div", "rv-sub", bits.join(" ・ ") || "何も動かしませんでした"));
+  const rows = rvh("div", "rv-picks");
+  for (const name of rv.picks) {
+    const now = rvOpenAll(name).length, was = rv.before[name];
+    const r = rvh("div", "rv-pick");
+    r.append(rvh("span", "rv-pn", rvLabel(name)), rvh("span", "rv-pc", was === now ? `${now}件` : `${was}件 → ${now}件`));
+    rows.append(r);
+  }
+  box.append(rows);
+  const act = rvh("div", "rv-acts");
+  const more = rvh("button", "rv-go primary", "もう少し見る");
+  more.onclick = () => { rv.phase = "pick"; rvRender(); };
+  const back = rvh("button", "rv-x", "1つ戻る");
+  back.onclick = rvBack;
+  back.disabled = !rv.hist.length;
+  const close = rvh("button", "rv-x", "閉じる");
+  close.onclick = closeReview;
+  act.append(more, back, close);
+  box.append(act);
+  rvEl.replaceChildren(box);
+}
+
+function rvRender() {
+  if (rv.phase === "pick") return rvRenderPick();
+  if (rv.phase === "done") return rvRenderDone();
+  return rvRenderRun();
+}
+
+function reviewKey(e) {
+  if (e.key === "Escape") { closeReview(); e.preventDefault(); return; }
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "z") { if (rv.phase !== "pick") rvBack(); e.preventDefault(); return; }
+  if (rv.phase !== "run" || mod || e.altKey) return;
+  if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (/^[1-9]$/.test(k)) { if (rv.dests[+k - 1] != null) rvMove(rv.dests[+k - 1]); }
+  else if (k === "0") rvMove("");
+  else if (k === "d") rvDone();
+  else if (k === "x") rvCancel();
+  else if (k === "k") rvKeep();
+  else if (k === "s" || k === "arrowright" || k === " ") rvSkip();
+  else if (k === "u" || k === "arrowleft" || k === "backspace") rvBack();
+  else return;
+  e.preventDefault();
 }
 
 function bulkMenu(ids) {
